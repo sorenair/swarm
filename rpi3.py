@@ -75,12 +75,25 @@ def main():
     
     # turbidity card
     turbCard = ctk.CTkFrame(content, corner_radius=16)
-    turbCard.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=10, pady=10)
+    turbCard.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
     ctk.CTkLabel(turbCard, text="Turbidity", font=("SF Pro Text",16,"bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(12,4))
     turbPct = ctk.StringVar(value="—")
     ntu = ctk.StringVar(value="—")
     ctk.CTkLabel(turbCard, textvariable=turbPct, font=("SF Pro Text", 24)).grid(row=1, column=0, sticky="w", padx=12, pady=4)
-    ctk.CTkLabel(turbCard, textvariable=ntu, font=("SF Pro Text", 14), text_color="gray40").grid(row=2, column=0, sticky="w", padx=12, pady=(0, 12))\
+    ctk.CTkLabel(turbCard, textvariable=ntu, font=("SF Pro Text", 14), text_color="gray40").grid(
+        row=2, column=0, sticky="w", padx=12, pady=(0, 12)
+    )
+
+    # float / liquid level card
+    levelCard = ctk.CTkFrame(content, corner_radius=16)
+    levelCard.grid(row=1, column=1, sticky="nsew", padx=10, pady=10)
+    ctk.CTkLabel(levelCard, text="Liquid Level", font=("SF Pro Text",16,"bold")).grid(
+        row=0, column=0, sticky="w", padx=12, pady=(12,4)
+    )
+    levelText = ctk.StringVar(value="—")
+    ctk.CTkLabel(levelCard, textvariable=levelText, font=("SF Pro Text", 20)).grid(
+        row=1, column=0, sticky="w", padx=12, pady=(4,12)
+    )
     
     #motor card
     motorCard = ctk.CTkFrame(content, corner_radius=16)
@@ -117,6 +130,16 @@ def main():
                             flow.set(f"{m.get('flowLpm', 0):.2f} L/min")
                             turbPct.set(f"{m.get('% Turbidity', 0):.1f} %")
                             ntu.set(f"{m.get('NTU', 0):.1f} NTU")
+
+                            # float level
+                            lvl = m.get("levelOk", None)
+                            if lvl is None:
+                                levelText.set("—")
+                            elif lvl:
+                                levelText.set("OK")
+                            else:
+                                levelText.set("LOW / FAULT")
+
                     except json.JSONDecodeError:
                         title_status.set("Bad JSON")
         except queue.Empty:

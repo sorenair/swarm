@@ -594,6 +594,9 @@ def main():
     ctk.CTkLabel(levelCard, text="Liquid Level", font=("SF Pro Text",16,"bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(12,4))
     levelText = ctk.StringVar(value="—")
     ctk.CTkLabel(levelCard, textvariable=levelText, font=("SF Pro Text", 20)).grid(row=1, column=0, sticky="w", padx=12, pady=(4,12))
+    ctk.CTkLabel(levelCard, text="Lid Interlock", font=("SF Pro Text",16,"bold")).grid(row=3, column=0, sticky="w", padx=12, pady=(12,4))
+    lidText = ctk.StringVar(value="—")
+    ctk.CTkLabel(levelCard, textvariable=lidText, font=("SF Pro Text", 20)).grid(row=4, column=0, sticky="w", padx=12, pady=(4,12))
 
     # heater card
     heaterCard = ctk.CTkFrame(content, corner_radius=16)
@@ -602,18 +605,14 @@ def main():
 
     heaterEnableVar = ctk.BooleanVar(value=False)
     heaterStatusText = ctk.StringVar(value="Disabled")
-    heaterSetText = ctk.StringVar(value="Set: —")
     heaterOutText = ctk.StringVar(value="Output: —")
     heaterWarnText = ctk.StringVar(value="")
-    lidText = ctk.StringVar(value="Lid: —")
 
     def on_heater_toggle():
         send(f"HEATER {1 if heaterEnableVar.get() else 0}")
 
     ctk.CTkSwitch(heaterCard, text="Enable", variable=heaterEnableVar, command=on_heater_toggle).grid(row=0, column=1, sticky="e", padx=12, pady=(12,6))
-    ctk.CTkLabel(heaterCard, textvariable=lidText, font=("SF Pro Text", 14), text_color="gray40").grid(row=1, column=1, sticky="e", padx=12, pady=(0,4))
     ctk.CTkLabel(heaterCard, textvariable=heaterStatusText, font=("SF Pro Text", 14)).grid(row=1, column=0, sticky="w", padx=12, pady=(0,4))
-    ctk.CTkLabel(heaterCard, textvariable=heaterSetText, font=("SF Pro Text", 14), text_color="gray40").grid(row=2, column=0, sticky="w", padx=12, pady=(0,4))
     ctk.CTkLabel(heaterCard, textvariable=heaterOutText, font=("SF Pro Text", 14), text_color="gray40").grid(row=3, column=0, sticky="w", padx=12, pady=(0,8))
     ctk.CTkLabel(heaterCard, textvariable=heaterWarnText, font=("SF Pro Text", 14, "bold"), text_color="red").grid(row=4, column=0, columnspan=2, sticky="w", padx=12, pady=(0,12))
     heaterCard.grid_columnconfigure(0, weight=1)
@@ -692,11 +691,6 @@ def main():
 
                             if isinstance(h_en, bool):
                                 heaterEnableVar.set(h_en)
-
-                            if h_set is not None:
-                                heaterSetText.set(f"Temp set to: {float(h_set):.1f} °F")
-                            else:
-                                heaterSetText.set("Temp set to: —")
 
                             status_parts = []
                             if isinstance(h_en, bool):

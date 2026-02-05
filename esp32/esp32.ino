@@ -199,16 +199,36 @@ void setHeaterLED(float temp_f, bool requestOn)
 
 void handleHeaterCommand(const String &line)
 {
-  // Accepts "HEATER 1" or "HEATER 0"
-  if (line.startsWith("HEATER"))
-  {
-    int v = line.endsWith("1") ? 1 : 0;
-    heaterEn = (v == 1);
+  // Backwards-compatible:
+  //   "HEATER 1" / "HEATER 0"  -> enable/disable
+  // Extended:
+  //   "HEATER SET <tempF>"     -> update setpoint
+  //   "HEATER RESET"           -> clear overtemp latch (heaterStop/secOver)
+  if (!line.startsWith("HEATER")) return;
 
-    Serial.print("{\"ack\":\"HEATER\",\"req\":");
-    Serial.print(heaterEn ? "true" : "false");
+  float tF = 0.0f;
+  if (sscanf(line.c_str(), "HEATER SET %f", &tF) == 1)
+  {
+    setTempF = tF;
+    Serial.print("{\"ack\":\"HEATER\",\"setTempF\":");
+    Serial.print(setTempF, 1);
     Serial.println("}");
+    return;
   }
+
+  if (line.equalsIgnoreCase("HEATER RESET"))
+  {
+    secOver = 0;
+    heaterStop = false;
+    Serial.println("{\"ack\":\"HEATER\",\"reset\":true}");
+    return;
+  }
+
+  int v = line.endsWith("1") ? 1 : 0;
+  heaterEn = (v == 1);
+  Serial.print("{\"ack\":\"HEATER\",\"req\":");
+  Serial.print(heaterEn ? "true" : "false");
+  Serial.println("}");
 }
 
 
@@ -277,6 +297,130 @@ void handleMotorCommand(const String &line)
 /////////////////////////////////////////////////////////////////////////////////
 // SETUP
 /////////////////////////////////////////////////////////////////////////////////
+
+/////////////////////////////////////////////////////////////////////////////////
+// CYCLE (WASH PROGRAM STATE MACHINE)
+/////////////////////////////////////////////////////////////////////////////////
+
+enum CycleState : uint8_t { CYCLE_IDLE=0, CYCLE_WASHING=1, CYCLE_PAUSED=2, CYCLE_COMPLETE=3, CYCLE_FAULT=4 };
+
+CycleState cycleState = CYCLE_IDLE;
+int32_t cycleRemainingS = 0;
+
+// Defaults for wash behavior (tune for your machine)
+uint8_t cycleMotorDuty = 200;     // 0..255
+bool cycleMotorFwd = true;
+
+const char* cycleStateStr(CycleState s)
+{
+  switch (s)
+  {
+    case CYCLE_IDLE:     return "IDLE";
+    case CYCLE_WASHING:  return "WASHING";
+    case CYCLE_PAUSED:   return "PAUSED";
+    case CYCLE_COMPLETE: return "COMPLETE";
+    case CYCLE_FAULT:    return "FAULT";
+    default:             return "IDLE";
+  }
+}
+
+void cycleStopAllOutputs()
+{
+  heaterEn = false;
+  motorStop();
+}
+
+void cycleApplyOutputsForState()
+{
+  if (cycleState == CYCLE_WASHING)
+  {
+    // Heater remains subject to lidClosed + bang-bang + overtemp shutoff in loop()
+    heaterEn = true;
+    //motorDrive(cycleMotorDuty, cycleMotorFwd);
+  }
+  else if (cycleState == CYCLE_PAUSED)
+  {
+    heaterEn = false;
+    motorStop();
+  }
+  else
+  {
+    cycleStopAllOutputs();
+  }
+}
+
+void handleCycleCommand(const String &line)
+{
+  // "CYCLE START <seconds> <tempF>"
+  // "CYCLE PAUSE"
+  // "CYCLE RESUME"
+  // "CYCLE STOP"
+  if (!line.startsWith("CYCLE")) return;
+
+  if (line.startsWith("CYCLE START"))
+  {
+    int secs = 0;
+    float tF = setTempF;
+    int n = sscanf(line.c_str(), "CYCLE START %d %f", &secs, &tF);
+    if (n >= 1)
+    {
+      cycleRemainingS = max(0, secs);
+      if (n >= 2) setTempF = tF;
+
+      cycleState = (cycleRemainingS > 0) ? CYCLE_WASHING : CYCLE_COMPLETE;
+      cycleApplyOutputsForState();
+
+      Serial.print("{\"ack\":\"CYCLE\",\"cmd\":\"START\",\"state\":\"");
+      Serial.print(cycleStateStr(cycleState));
+      Serial.print("\",\"remainingS\":");
+      Serial.print(cycleRemainingS);
+      Serial.print(",\"setTempF\":");
+      Serial.print(setTempF, 1);
+      Serial.println("}");
+    }
+    return;
+  }
+
+  if (line.equalsIgnoreCase("CYCLE PAUSE"))
+  {
+    if (cycleState == CYCLE_WASHING)
+    {
+      cycleState = CYCLE_PAUSED;
+      cycleApplyOutputsForState();
+    }
+    Serial.print("{\"ack\":\"CYCLE\",\"cmd\":\"PAUSE\",\"state\":\"");
+    Serial.print(cycleStateStr(cycleState));
+    Serial.println("\"}");
+    return;
+  }
+
+  if (line.equalsIgnoreCase("CYCLE RESUME"))
+  {
+    if (cycleState == CYCLE_PAUSED)
+    {
+      cycleState = (cycleRemainingS > 0) ? CYCLE_WASHING : CYCLE_COMPLETE;
+      cycleApplyOutputsForState();
+    }
+    Serial.print("{\"ack\":\"CYCLE\",\"cmd\":\"RESUME\",\"state\":\"");
+    Serial.print(cycleStateStr(cycleState));
+    Serial.println("\"}");
+    return;
+  }
+
+  if (line.equalsIgnoreCase("CYCLE STOP"))
+  {
+    cycleState = CYCLE_IDLE;
+    cycleRemainingS = 0;
+    cycleApplyOutputsForState();
+
+    Serial.println("{\"ack\":\"CYCLE\",\"cmd\":\"STOP\",\"state\":\"IDLE\"}");
+    return;
+  }
+
+  // Unknown CYCLE subcommand
+  Serial.println("{\"ack\":\"CYCLE\",\"err\":\"UNKNOWN\"}");
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -349,6 +493,19 @@ void loop()
 
     // LID INTERLOCK
     bool lidClosed = (digitalRead(LID_LOCK) == LOW);
+
+    // CYCLE countdown
+    if (cycleState == CYCLE_WASHING)
+    {
+      if (cycleRemainingS > 0) cycleRemainingS--;
+      if (cycleRemainingS <= 0)
+      {
+        cycleRemainingS = 0;
+        cycleState = CYCLE_COMPLETE;
+        cycleApplyOutputsForState();
+      }
+    }
+
     
     // HEATER
     bool demandHeat = false;
@@ -416,6 +573,17 @@ void loop()
     Serial.print(",\"lidClosed\":");
     Serial.print(lidClosed ? "true" : "false");
 
+    // Cycle state (RPi UI uses these fields)
+    Serial.print(",\"cycleState\":\"");
+    Serial.print(cycleStateStr(cycleState));
+    Serial.print("\"");
+
+    Serial.print(",\"cycleRemainingS\":");
+    Serial.print(cycleRemainingS);
+
+    Serial.print(",\"cycleTempSetF\":");
+    Serial.print(setTempF, 1);
+
     Serial.println("}");
   }
 
@@ -438,6 +606,11 @@ void loop()
     else if (line.startsWith("HEATER"))
     {
       handleHeaterCommand(line);  // calls heater handler
+    }
+
+    else if (line.startsWith("CYCLE"))
+    {
+      handleCycleCommand(line);
     }
   }
 

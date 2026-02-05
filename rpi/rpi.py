@@ -343,14 +343,10 @@ def main():
     _cycle_tick_job = None
     def _cycle_tick():
         nonlocal _cycle_tick_job
-        if cycle_state.get() == "WASHING":
-            r = cycle_remaining_s.get()
-            if r > 0:
-                cycle_remaining_s.set(r - 1)
-            else:
-                cycle_state.set("COMPLETE")
-                log_cycle_snapshot()
+        # RPi no longer owns the cycle countdown; ESP32 reports cycleRemainingS/cycleState.
+        # Keep this timer only for periodic UI refresh hooks if needed later.
         _cycle_tick_job = app.after(1000, _cycle_tick)
+
 
     def start_cycle():
         if cycle_state.get() in ("WASHING", "PAUSED"):
@@ -358,17 +354,17 @@ def main():
         cycle_state.set("WASHING")
         cycle_remaining_s.set(int(cycle_duration_min.get() * 60))
         log_cycle_snapshot()
-        # placeholder: send(f"CYCLE START {cycle_remaining_s.get()} {cycle_temp_set_f.get():.1f}")
+        send(f"CYCLE START {cycle_remaining_s.get()} {cycle_temp_set_f.get():.1f}")
 
     def pause_resume_cycle():
         if cycle_state.get() == "WASHING":
             cycle_state.set("PAUSED")
             log_cycle_snapshot()
-            # placeholder: send("CYCLE PAUSE")
+            send("CYCLE PAUSE")
         elif cycle_state.get() == "PAUSED":
             cycle_state.set("WASHING")
             log_cycle_snapshot()
-            # placeholder: send("CYCLE RESUME")
+            send("CYCLE RESUME")
 
     def stop_cycle():
         if cycle_state.get() in ("IDLE", "COMPLETE"):
@@ -376,7 +372,7 @@ def main():
         cycle_state.set("IDLE")
         cycle_remaining_s.set(0)
         log_cycle_snapshot()
-        # placeholder: send("CYCLE STOP")
+        send("CYCLE STOP")
 
     _cycle_tick()
 
@@ -643,6 +639,13 @@ def main():
                 elif kind == "data":
                     try:
                         m = json.loads(payload)
+                        # Handle controller acknowledgements / errors
+                        if "ack" in m:
+                            try:
+                                title_status.set(f"ACK: {m.get('ack')} {m.get('cmd','')}".strip())
+                            except Exception:
+                                pass
+
                         if m.get("ok"):
                             tempNowF.set(f"{float(m.get('F', 0)):.1f} °F")
                             flow.set(f"{m.get('flowLpm', 0):.2f} L/min")
@@ -662,6 +665,25 @@ def main():
                             h_stop = m.get("heaterStop", None)
                             lvl = m.get("levelOk", None)
                             lid_closed = m.get("lidClosed", None)
+
+                            # Cycle (reported by ESP32)
+                            c_state = m.get("cycleState", None)
+                            c_rem   = m.get("cycleRemainingS", None)
+                            c_temp  = m.get("cycleTempSetF", None)
+
+                            if isinstance(c_state, str) and c_state:
+                                cycle_state.set(c_state)
+                            if c_rem is not None:
+                                try:
+                                    cycle_remaining_s.set(int(float(c_rem)))
+                                except Exception:
+                                    pass
+                            if c_temp is not None:
+                                try:
+                                    cycle_temp_set_f.set(float(c_temp))
+                                except Exception:
+                                    pass
+
 
                             if isinstance(lid_closed, bool):
                                 lidText.set("Lid is closed" if lid_closed else "Lid is open")

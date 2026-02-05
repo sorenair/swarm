@@ -8,7 +8,6 @@
 #define MAX_MOSI 23
 #define MAX_MISO 19
 #define MAX_CLK  18
-#define LID_LOCK 21
 
 Adafruit_MAX31865 sensor(MAX_CS, MAX_MOSI, MAX_MISO, MAX_CLK);
 #define RREF 4301.0
@@ -105,72 +104,10 @@ float ntuEstimateFromPct(uint8_t pct)
 /////////////////////////////////////////////////////////////////////////////////
 
 #define HEATER_LED 4
-const float OVER_F = 120.0f;
-float setTempF = 95.0f;
-uint8_t secOver = 0;
-bool heaterStop = false;
-bool heaterOn = false;
-bool heaterEn = false;
-bool heaterLevel = false;
 
-// bang-bang automation
-bool bangBang(float temp_f)
+void setHeaterLED(float temp_f)
 {
-  if (isnan(temp_f))  // failsafe in case of invalid temp value
-  {
-    return false;
-  }
-
-  return (temp_f < setTempF);
-}
-
-void setHeaterLED(float temp_f, bool requestOn)
-{
-  //NEW STUFF (E-heater shutoff)
-  ///////////////////////////////////////////
-  if (isnan(temp_f))  
-  {
-    heaterOn = false;
-    digitalWrite(HEATER_LED, LOW);
-    return;
-  }
-
-  if (temp_f >= OVER_F)
-  {
-    if (secOver < 255)
-    {
-      secOver++;
-    }
-  }
-
-  else
-  {
-    secOver = 0;
-    heaterStop = false;
-  }
-
-  // If temp too high for 20 sec or more, shut off heater
-  if (secOver >= 20)
-  {
-    heaterStop = true;
-  }
-
-
-  // Final output
-  if (heaterStop)
-  {
-    heaterOn = false;
-  }
-
-  else
-  {
-    heaterOn = requestOn;
-  }
-
-  digitalWrite(HEATER_LED, heaterOn ? HIGH : LOW);
-  ///////////////////////////////////////////
-  
-  //digitalWrite(HEATER_LED, LOW);
+  digitalWrite(HEATER_LED, LOW);
 
   // Automated heater control
   /*
@@ -184,33 +121,21 @@ void setHeaterLED(float temp_f, bool requestOn)
   }
   */
 
-  
+  /*
   // FOR TESTING: use float switch to control heater
   bool levelRaw = digitalRead(33);   // HIGH = open, LOW = closed
   // Assuming NC contact wired so "closed" = level OK.
   bool levelOk = (levelRaw == LOW);
 
-  if (!levelOk)
+  if (levelOk)
+  {
+    digitalWrite(HEATER_LED, HIGH);
+  }
+  else
   {
     digitalWrite(HEATER_LED, LOW);
-  }
+  }*/
 }
-
-
-void handleHeaterCommand(const String &line)
-{
-  // Accepts "HEATER 1" or "HEATER 0"
-  if (line.startsWith("HEATER"))
-  {
-    int v = line.endsWith("1") ? 1 : 0;
-    heaterEn = (v == 1);
-
-    Serial.print("{\"ack\":\"HEATER\",\"req\":");
-    Serial.print(heaterEn ? "true" : "false");
-    Serial.println("}");
-  }
-}
-
 
 /////////////////////////////////////////////////////////////////////////////////
 // MOTOR
@@ -234,8 +159,7 @@ void motorDrive(uint8_t duty, bool forward)
   analogWrite(ENA, duty);
 }
 
-
-void handleMotorCommand(const String &line)
+void handleCommand(const String &line)
 {
   if (line.startsWith("MOTOR"))
   {
@@ -268,6 +192,7 @@ void handleMotorCommand(const String &line)
 }
 
 
+
 /////////////////////////////////////////////////////////////////////////////////
 // FLOAT SWITCH (LEVEL)
 /////////////////////////////////////////////////////////////////////////////////
@@ -294,10 +219,6 @@ void setup()
 
   // HEATER
   pinMode(HEATER_LED, OUTPUT);
-  digitalWrite(HEATER_LED, LOW);  // Starts off
-  heaterEn = false;
-  heaterStop = false;
-  secOver = 0;
 
   // MOTOR
   pinMode(IN1, OUTPUT);
@@ -307,9 +228,6 @@ void setup()
 
   // FLOAT SWITCH
   pinMode(LEVEL_SW, INPUT_PULLUP);  // enable internal pull-up
-
-  // LID INTERLOCK
-  pinMode(LID_LOCK, INPUT_PULLUP);
 }
 
 
@@ -336,6 +254,9 @@ void loop()
     bool okT = !isnan(tempC);
     float tempF = okT ? (tempC * 9.0f / 5.0f + 32.0f) : NAN;
 
+    // HEATER
+    setHeaterLED(tempF);
+
     // TURBIDITY
     uint8_t turbPct = 0;
     bool okTur = readTurbidity(turbPct);
@@ -347,26 +268,8 @@ void loop()
     // Assuming NC contact wired so "closed" = level OK.
     bool levelOk = (levelRaw == LOW);
 
-    // LID INTERLOCK
-    bool lidClosed = (digitalRead(LID_LOCK) == LOW);
-    
-    // HEATER
-    bool demandHeat = false;
-    if (heaterEn && lidClosed)
-    {
-      demandHeat = bangBang(tempF);
-    }
-
-    else
-    {
-      demandHeat = false;
-    }
-
-    setHeaterLED(tempF, demandHeat);
-    
     // JSON OUT
     Serial.print("{\"ok\":true");
-    
     Serial.print(",\"flowLpm\":"); Serial.print(flowLpm, 2);
     if (okT)
     {
@@ -388,34 +291,6 @@ void loop()
     Serial.print(",\"levelOk\":");
     Serial.print(levelOk ? "true" : "false");
 
-    //NEW HEATER SHUTOFF STUFF
-    ///////////////////////////////////////////////////////////////
-    Serial.print(",\"heaterEnable\":");
-    Serial.print(heaterEn ? "true" : "false");
-
-    Serial.print(",\"setTempF\":");
-    Serial.print(setTempF, 1);
-
-    Serial.print(",\"heaterDemand\":");
-    Serial.print(demandHeat ? "true" : "false");
-    
-    Serial.print(",\"heaterOn\":");
-    Serial.print(heaterOn ? "true" : "false");
-    
-    Serial.print(",\"overTemp\":");
-    Serial.print((okT && !isnan(tempF) && tempF >= OVER_F) ? "true" : "false");
-
-    Serial.print(",\"secOver\":");
-    Serial.print(secOver);
-
-    Serial.print(",\"heaterStop\":");
-    Serial.print(heaterStop ? "true" : "false");
-    ///////////////////////////////////////////////////////////////
-
-    //LID STUFF
-    Serial.print(",\"lidClosed\":");
-    Serial.print(lidClosed ? "true" : "false");
-
     Serial.println("}");
   }
 
@@ -424,20 +299,13 @@ void loop()
   {
     String line = Serial.readStringUntil('\n');
     line.trim();
-    
     if (line.equalsIgnoreCase("PING"))
     {
       Serial.println("{\"ack\":\"PING\"}");
     }
-    
     else if (line.startsWith("MOTOR"))
     {
-      handleMotorCommand(line);   // calls motor handler
-    }
-    
-    else if (line.startsWith("HEATER"))
-    {
-      handleHeaterCommand(line);  // calls heater handler
+      handleCommand(line);   // calls your new motor handler
     }
   }
 

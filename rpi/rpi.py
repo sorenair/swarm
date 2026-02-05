@@ -216,7 +216,7 @@ def main():
 
     app = ctk.CTk()
     app.update_idletasks()
-    app.attributes("-fullscreen", True)
+    app.attributes("-fullscreen", False)
     app.title("SWARM")
 
     def on_close(_=None):
@@ -510,9 +510,9 @@ def main():
     action.grid_columnconfigure(1, weight=1)
     action.grid_columnconfigure(2, weight=1)
 
-    btn_start = ctk.CTkButton(action, text="Start", corner_radius=12, command=start_cycle)
-    btn_pause = ctk.CTkButton(action, text="Pause / Resume", corner_radius=12, command=pause_resume_cycle)
-    btn_stop  = ctk.CTkButton(action, text="Stop", corner_radius=12, command=stop_cycle)
+    btn_start = ctk.CTkButton(action, text="START", font=("SF Pro Text", 48), corner_radius=12, command=start_cycle)
+    btn_pause = ctk.CTkButton(action, text="PAUSE / RESUME", font=("SF Pro Text", 48), corner_radius=12, command=pause_resume_cycle)
+    btn_stop  = ctk.CTkButton(action, text="STOP", font=("SF Pro Text", 48), corner_radius=12, command=stop_cycle)
 
     _last_action_mode = None  # "idle" or "active"
     def update_action_buttons():
@@ -612,7 +612,7 @@ def main():
         send(f"HEATER {1 if heaterEnableVar.get() else 0}")
 
     ctk.CTkSwitch(heaterCard, text="Enable", variable=heaterEnableVar, command=on_heater_toggle).grid(row=0, column=1, sticky="e", padx=12, pady=(12,6))
-    ctk.CTkLabel(heaterCard, textvariable=heaterStatusText, font=("SF Pro Text", 14)).grid(row=1, column=0, sticky="w", padx=12, pady=(0,4))
+    #ctk.CTkLabel(heaterCard, textvariable=heaterStatusText, font=("SF Pro Text", 14)).grid(row=1, column=0, sticky="w", padx=12, pady=(0,4))
     ctk.CTkLabel(heaterCard, textvariable=heaterOutText, font=("SF Pro Text", 14), text_color="gray40").grid(row=3, column=0, sticky="w", padx=12, pady=(0,8))
     ctk.CTkLabel(heaterCard, textvariable=heaterWarnText, font=("SF Pro Text", 14, "bold"), text_color="red").grid(row=4, column=0, columnspan=2, sticky="w", padx=12, pady=(0,12))
     heaterCard.grid_columnconfigure(0, weight=1)

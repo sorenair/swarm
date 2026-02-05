@@ -1,5 +1,16 @@
 #include <Adafruit_MAX31865.h>
 
+// --- Cycle state machine types must be declared before Arduino auto-prototypes ---
+enum CycleState : uint8_t {
+  CYCLE_IDLE = 0,
+  CYCLE_WASHING = 1,
+  CYCLE_PAUSED = 2,
+  CYCLE_COMPLETE = 3,
+  CYCLE_FAULT = 4
+};
+
+static const char* cycleStateToStr(CycleState s);
+
 /////////////////////////////////////////////////////////////////////////////////
 // TEMPERATURE SENSOR (PT100 & MAX31865 via SPI)
 /////////////////////////////////////////////////////////////////////////////////
@@ -302,8 +313,6 @@ void handleMotorCommand(const String &line)
 // CYCLE (WASH PROGRAM STATE MACHINE)
 /////////////////////////////////////////////////////////////////////////////////
 
-enum CycleState : uint8_t { CYCLE_IDLE=0, CYCLE_WASHING=1, CYCLE_PAUSED=2, CYCLE_COMPLETE=3, CYCLE_FAULT=4 };
-
 CycleState cycleState = CYCLE_IDLE;
 int32_t cycleRemainingS = 0;
 
@@ -311,7 +320,7 @@ int32_t cycleRemainingS = 0;
 uint8_t cycleMotorDuty = 200;     // 0..255
 bool cycleMotorFwd = true;
 
-const char* cycleStateStr(CycleState s)
+static const char* cycleStateToStr(CycleState s)
 {
   switch (s)
   {
@@ -371,7 +380,7 @@ void handleCycleCommand(const String &line)
       cycleApplyOutputsForState();
 
       Serial.print("{\"ack\":\"CYCLE\",\"cmd\":\"START\",\"state\":\"");
-      Serial.print(cycleStateStr(cycleState));
+      Serial.print(cycleStateToStr(cycleState));
       Serial.print("\",\"remainingS\":");
       Serial.print(cycleRemainingS);
       Serial.print(",\"setTempF\":");
@@ -389,7 +398,7 @@ void handleCycleCommand(const String &line)
       cycleApplyOutputsForState();
     }
     Serial.print("{\"ack\":\"CYCLE\",\"cmd\":\"PAUSE\",\"state\":\"");
-    Serial.print(cycleStateStr(cycleState));
+    Serial.print(cycleStateToStr(cycleState));
     Serial.println("\"}");
     return;
   }
@@ -402,7 +411,7 @@ void handleCycleCommand(const String &line)
       cycleApplyOutputsForState();
     }
     Serial.print("{\"ack\":\"CYCLE\",\"cmd\":\"RESUME\",\"state\":\"");
-    Serial.print(cycleStateStr(cycleState));
+    Serial.print(cycleStateToStr(cycleState));
     Serial.println("\"}");
     return;
   }
@@ -575,7 +584,7 @@ void loop()
 
     // Cycle state (RPi UI uses these fields)
     Serial.print(",\"cycleState\":\"");
-    Serial.print(cycleStateStr(cycleState));
+    Serial.print(cycleStateToStr(cycleState));
     Serial.print("\"");
 
     Serial.print(",\"cycleRemainingS\":");

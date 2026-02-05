@@ -324,11 +324,12 @@ def main():
     # Map whatever your controller uses later.
     # IDLE | WASHING | PAUSED | COMPLETE | FAULT
     cycle_state = ctk.StringVar(value="IDLE")
-
-    cycle_duration_min = ctk.IntVar(value=10)
-    cycle_temp_set_f = ctk.DoubleVar(value=95.0)
     cycle_remaining_s = ctk.IntVar(value=0)
-
+    cycle_duration_min_in = ctk.IntVar(value=10)
+    cycle_duration_min = ctk.IntVar(value=10)
+    cycle_temp_set_f_in   = ctk.DoubleVar(value=95.0)
+    cycle_temp_set_f = ctk.DoubleVar(value=95.0)
+    
     def log_cycle_snapshot():
         logger.log_event({
             "timestamp": now_iso(),
@@ -340,29 +341,21 @@ def main():
             "ui_cycle_temp_set_f": float(cycle_temp_set_f.get()),
         })
 
-    _cycle_tick_job = None
-    def _cycle_tick():
-        nonlocal _cycle_tick_job
-        # RPi no longer owns the cycle countdown; ESP32 reports cycleRemainingS/cycleState.
-        # Keep this timer only for periodic UI refresh hooks if needed later.
-        _cycle_tick_job = app.after(1000, _cycle_tick)
-
-
     def start_cycle():
         if cycle_state.get() in ("WASHING", "PAUSED"):
             return
-        cycle_state.set("WASHING")
-        cycle_remaining_s.set(int(cycle_duration_min.get() * 60))
+        
+        duration_s = int(float(cycle_duration_min_in.get()) * 60)
+        temp_f = float(cycle_temp_set_f_in.get())
+
         log_cycle_snapshot()
-        send(f"CYCLE START {cycle_remaining_s.get()} {cycle_temp_set_f.get():.1f}")
+        send(f"CYCLE START {duration_s} {temp_f:.1f}")
 
     def pause_resume_cycle():
         if cycle_state.get() == "WASHING":
-            cycle_state.set("PAUSED")
             log_cycle_snapshot()
             send("CYCLE PAUSE")
         elif cycle_state.get() == "PAUSED":
-            cycle_state.set("WASHING")
             log_cycle_snapshot()
             send("CYCLE RESUME")
 
@@ -373,8 +366,6 @@ def main():
         cycle_remaining_s.set(0)
         log_cycle_snapshot()
         send("CYCLE STOP")
-
-    _cycle_tick()
 
     def is_cycle_active() -> bool:
         return cycle_state.get() in ("WASHING", "PAUSED")
@@ -462,14 +453,14 @@ def main():
     ctk.CTkLabel(set_card, text="Cycle Duration (min)", font=("SF Pro Text", 13), text_color="gray30").grid(
         row=1, column=0, sticky="w", padx=14, pady=(0, 6)
     )
-    ctk.CTkEntry(set_card, textvariable=cycle_duration_min, width=120).grid(
+    ctk.CTkEntry(set_card, textvariable=cycle_duration_min_in, width=120).grid(
         row=1, column=1, sticky="e", padx=14, pady=(0, 6)
     )
 
     ctk.CTkLabel(set_card, text="Temperature Setpoint (°F)", font=("SF Pro Text", 13), text_color="gray30").grid(
         row=2, column=0, sticky="w", padx=14, pady=(0, 14)
     )
-    ctk.CTkEntry(set_card, textvariable=cycle_temp_set_f, width=120).grid(
+    ctk.CTkEntry(set_card, textvariable=cycle_temp_set_f_in, width=120).grid(
         row=2, column=1, sticky="e", padx=14, pady=(0, 14)
     )
 

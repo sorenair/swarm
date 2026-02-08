@@ -6,6 +6,6 @@ RX_TIMEOUT_S = 3.0                  # show fault if no RX for this many seconds
 
 LOG_DIR = "logs"
 
-# Keep UI defaults together too
+# UI defaults
 DEFAULT_CYCLE_MIN = 10.0
-DEFAULT_TEMP_F = 140.0
+DEFAULT_TEMP_F = 100.0

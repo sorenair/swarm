@@ -1,6 +1,7 @@
 # app/ui_layout.py
 from dataclasses import dataclass
 import customtkinter as ctk
+from app.config import DEFAULT_TEMP_F, DEFAULT_CYCLE_MIN
 
 @dataclass
 class UI:
@@ -152,9 +153,9 @@ def build_ui(app: ctk.CTk) -> UI:
     # --------------------------
     cycle_state = ctk.StringVar(value="IDLE")
     cycle_remaining_s = ctk.IntVar(value=0)
-    cycle_duration_min_in = ctk.IntVar(value=10)
-    cycle_temp_set_f_in   = ctk.DoubleVar(value=95.0)
-    last_mode = None 
+    cycle_duration_min_in = ctk.IntVar(value=DEFAULT_CYCLE_MIN)
+    cycle_temp_set_f_in   = ctk.DoubleVar(value=DEFAULT_TEMP_F)
+    last_mode = None    # track for operation panel refresh logic
 
     # --------------------------
     # Operation Page Layout
@@ -233,7 +234,7 @@ def build_ui(app: ctk.CTk) -> UI:
 
     def refresh_operation_panel():
         nonlocal last_mode
-        
+
         mode = "idle" if cycle_state.get() in ("IDLE", "COMPLETE") else "active"
 
         if mode != last_mode:

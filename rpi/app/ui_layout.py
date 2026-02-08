@@ -154,6 +154,7 @@ def build_ui(app: ctk.CTk) -> UI:
     cycle_remaining_s = ctk.IntVar(value=0)
     cycle_duration_min_in = ctk.IntVar(value=10)
     cycle_temp_set_f_in   = ctk.DoubleVar(value=95.0)
+    last_mode = None 
 
     # --------------------------
     # Operation Page Layout
@@ -231,30 +232,35 @@ def build_ui(app: ctk.CTk) -> UI:
         return cycle_state.get() in ("WASHING", "PAUSED")
 
     def refresh_operation_panel():
-        if is_cycle_active():
-            set_card.grid_forget()
-            time_card.grid(row=1, column=0, sticky="nsew", pady=(0, 12))
-        else:
-            time_card.grid_forget()
-            set_card.grid(row=1, column=0, sticky="nsew", pady=(0, 12))
-
+        nonlocal last_mode
+        
         mode = "idle" if cycle_state.get() in ("IDLE", "COMPLETE") else "active"
 
-        btn_start.grid_forget()
-        btn_pause.grid_forget()
-        btn_stop.grid_forget()
+        if mode != last_mode:
+            if is_cycle_active():
+                set_card.grid_forget()
+                time_card.grid(row=1, column=0, sticky="nsew", pady=(0, 12))
+            else:
+                time_card.grid_forget()
+                set_card.grid(row=1, column=0, sticky="nsew", pady=(0, 12))
 
-        if mode == "idle":
-            action.grid_columnconfigure(0, weight=1)
-            action.grid_columnconfigure(1, weight=0)
-            action.grid_columnconfigure(2, weight=0)
-            btn_start.grid(row=0, column=0, columnspan=3, padx=12, pady=12, sticky="nsew")
-        else:
-            action.grid_columnconfigure(0, weight=0)
-            action.grid_columnconfigure(1, weight=1)
-            action.grid_columnconfigure(2, weight=1)
-            btn_pause.grid(row=0, column=1, padx=12, pady=12, sticky="nsew")
-            btn_stop.grid(row=0, column=2, padx=12, pady=12, sticky="nsew")
+            btn_start.grid_forget()
+            btn_pause.grid_forget()
+            btn_stop.grid_forget()
+
+            if mode == "idle":
+                action.grid_columnconfigure(0, weight=1)
+                action.grid_columnconfigure(1, weight=0)
+                action.grid_columnconfigure(2, weight=0)
+                btn_start.grid(row=0, column=0, columnspan=3, padx=12, pady=12, sticky="nsew")
+            else:
+                action.grid_columnconfigure(0, weight=0)
+                action.grid_columnconfigure(1, weight=1)
+                action.grid_columnconfigure(2, weight=1)
+                btn_pause.grid(row=0, column=1, padx=12, pady=12, sticky="nsew")
+                btn_stop.grid(row=0, column=2, padx=12, pady=12, sticky="nsew")
+
+        last_mode = mode
 
     cycle_state.trace_add("write", lambda *_: refresh_operation_panel())
     refresh_operation_panel()

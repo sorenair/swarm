@@ -52,8 +52,6 @@ def main():
 
     ui = build_ui(app)
 
-    ui.show_page("operation")
-
     # ------------------------------------------
     # Open Serial Client + Machine Controller
     # ------------------------------------------

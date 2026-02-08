@@ -39,15 +39,15 @@ logger = AsyncLogger(XLSX_PATH, CSV_PATH, EVENT_HEADERS)
 # Main App
 # --------
 def main():
-    # --------------------------
+    # --------------
     # Instantiate UI
-    # --------------------------
+    # --------------
     ctk.set_appearance_mode("light")
     ctk.set_default_color_theme("blue")
 
     app = ctk.CTk()
     app.update_idletasks()
-    app.attributes("-fullscreen", False)
+    app.attributes("-fullscreen", True)
     app.title("SWARM")
 
     ui = build_ui(app)
@@ -58,7 +58,7 @@ def main():
     # Open Serial Client + Machine Controller
     # ------------------------------------------
     q = queue.Queue()
-    
+
     global ser_client
     ser_client = SerialClient(PORT, BAUD, q)
     ser_client.start()
@@ -91,9 +91,9 @@ def main():
 
         app.after(250, comms_watchdog)
 
-    # --------------------------
+    # ------------------------
     # Connect UI to Controller
-    # --------------------------
+    # ------------------------
     def on_close(_=None):
         try:
             logger.stop()
@@ -105,8 +105,6 @@ def main():
             pass
 
         app.destroy()
-
-    app.bind("<Escape>", on_close)
 
     def start_cycle():
         if ui.cycle_state.get() in ("WASHING", "PAUSED"):
@@ -134,6 +132,7 @@ def main():
         log_cycle_snapshot(logger, ui)
         controller.set_heater_enable(bool(ui.heaterEnableVar.get()))
 
+    app.bind("<Escape>", on_close)
     ui.btn_start.configure(command=start_cycle)
     ui.btn_pause.configure(command=pause_resume_cycle)
     ui.btn_stop.configure(command=stop_cycle)
@@ -167,11 +166,11 @@ def main():
                 ui.cycle_remaining_s.set(int(float(t.cycleRemainingS)))
             except Exception:
                 pass
-        if t.cycleTempSetF is not None:
-            try:
-                ui.cycle_temp_set_f_in.set(float(t.cycleTempSetF))
-            except Exception:
-                pass
+        #if t.cycleTempSetF is not None:
+        #    try:
+        #        ui.cycle_temp_set_f_in.set(float(t.cycleTempSetF))
+        #    except Exception:
+        #        pass
 
         # lid logic (keep your existing behavior)
         if isinstance(t.lidClosed, bool):
@@ -282,9 +281,9 @@ def main():
 
         app.after(200, poll_queue)
 
-    # ----------------------------
-    # Polling and Watchdog Kickoff
-    # ----------------------------
+    # --------------------
+    # App Loop Initiations
+    # --------------------
     app.after(200, poll_queue)
 
     app.after(250, comms_watchdog)

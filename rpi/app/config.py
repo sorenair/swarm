@@ -20,6 +20,6 @@ FAULTS_ENABLED = {
     "lid": True,
     "turbidity": True,
     }
-OVERTEMP_F = 100.0                     # over-temperature threshold for fault screen
+OVERTEMP_F = 82.0                     # over-temperature threshold for fault screen
 TURBIDITY_FAULT_PCT = 80.0            # turbidity threshold for fault screen
 FLOW_FAULT_LPM = 0.5                  # flow threshold for fault screen

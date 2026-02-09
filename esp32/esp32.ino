@@ -322,7 +322,7 @@ void cycleApplyOutputsForState()
   {
     // Heater remains subject to lidClosed + bang-bang + overtemp shutoff in loop()
     heaterEn = true;
-    motorDrive(cycleMotorDuty, cycleMotorFwd);
+    //motorDrive(cycleMotorDuty, cycleMotorFwd);
   }
   else if (cycleState == CYCLE_PAUSED)
   {

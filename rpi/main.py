@@ -49,7 +49,7 @@ def main():
 
     app = ctk.CTk()
     app.update_idletasks()
-    app.attributes("-fullscreen", True)
+    app.attributes("-fullscreen", False)
     app.title("SWARM")
 
     ui = build_ui(app)
@@ -212,6 +212,7 @@ def main():
                 if (not t.lidClosed) and ui.heaterEnableVar.get():
                     ui.heaterEnableVar.set(False)
                     ui.show_fault_overlay("Lid is open.")
+                    print("Lid fault - heater disabled")
                     fault = True
                 elif t.lidClosed:
                     pass
@@ -223,6 +224,7 @@ def main():
                     pass
                 else:
                     ui.show_fault_overlay("Low liquid level - refill required.")
+                    print("Level fault")
                     fault = True
 
         # temperature
@@ -232,6 +234,7 @@ def main():
                     pass
                 else:
                     ui.show_fault_overlay("Temperature exceeded threshold.")
+                    print("Overtemp fault")
                     fault = True
 
         # turbidity
@@ -241,6 +244,7 @@ def main():
                     pass
                 else:
                     ui.show_fault_overlay("Turbidity exceeded threshold - change liquid.")
+                    print("Turbidity fault")
                     fault = True
 
         # flow
@@ -250,6 +254,7 @@ def main():
                     pass
                 else:
                     ui.show_fault_overlay("Flow below threshold - check pump.")
+                    print("Flow fault")
                     fault = True
         
         if not fault:

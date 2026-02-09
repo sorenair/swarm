@@ -70,11 +70,6 @@ def main():
 
     # Communication Monitoring
     def comms_watchdog():
-        if not ENABLE_FAULT_SCREEN:
-            ui.hide_fault_overlay()
-            app.after(250, comms_watchdog)
-            return
-
         now = time.time()
         timed_out = (ser_client.last_rx_time > 0.0) and ((now - ser_client.last_rx_time) > RX_TIMEOUT_S)
 
@@ -85,9 +80,10 @@ def main():
                 reason = f"No telemetry received for {RX_TIMEOUT_S:.1f} seconds"
             else:
                 reason = "Communication fault"
-            ui.show_fault_overlay(reason)
+            #ui.show_fault_overlay(reason)
         else:
-            ui.hide_fault_overlay()
+            #ui.hide_fault_overlay()
+            pass
 
         app.after(250, comms_watchdog)
 
@@ -209,46 +205,55 @@ def main():
 
     def handle_faults(t, ui):
         """Apply fault handling based on the latest telemetry."""
+        fault = False
         # lid logic (keep your existing behavior)
         if get(FAULTS_ENABLED, "lid"):
             if isinstance(t.lidClosed, bool):
                 if (not t.lidClosed) and ui.heaterEnableVar.get():
                     ui.heaterEnableVar.set(False)
                     ui.show_fault_overlay("Lid is open.")
+                    fault = True
                 elif t.lidClosed:
-                    ui.hide_fault_overlay()
+                    pass
 
         # level
         if get(FAULTS_ENABLED, "level"):
             if isinstance(t.levelOk, bool):
                 if t.levelOk:
-                    ui.hide_fault_overlay()
+                    pass
                 else:
                     ui.show_fault_overlay("Low liquid level - refill required.")
+                    fault = True
 
         # temperature
         if get(FAULTS_ENABLED, "temp"):
             if isinstance(t.F, (int, float)):
                 if t.F < OVERTEMP_F:
-                    ui.hide_fault_overlay()
+                    pass
                 else:
                     ui.show_fault_overlay("Temperature exceeded threshold.")
+                    fault = True
 
         # turbidity
         if get(FAULTS_ENABLED, "turbidity"):
             if isinstance(t.turbidity_pct, (int, float)):
                 if t.turbidity_pct < TURBIDITY_FAULT_PCT:
-                    ui.hide_fault_overlay()
+                    pass
                 else:
                     ui.show_fault_overlay("Turbidity exceeded threshold - change liquid.")
+                    fault = True
 
         # flow
         if get(FAULTS_ENABLED, "flow"):
             if isinstance(t.flowLpm, (int, float)):
                 if t.flowLpm > FLOW_FAULT_LPM:
-                    ui.hide_fault_overlay()
+                    pass
                 else:
                     ui.show_fault_overlay("Flow below threshold - check pump.")
+                    fault = True
+        
+        if not fault:
+            ui.hide_fault_overlay()
 
     # ------------------------------
     # Poll Serial Queue and Log Data

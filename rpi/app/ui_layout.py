@@ -74,7 +74,7 @@ def build_ui(app: ctk.CTk) -> UI:
     header.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 8))
     header.grid_columnconfigure(1, weight=1)
 
-    ctk.CTkLabel(header, text="Control Panel", font=("SF Pro Display", 28, "bold"), text_color="black").grid(
+    ctk.CTkLabel(header, text="Operation Panel", font=("SF Pro Display", 28, "bold"), text_color="black").grid(
         row=0, column=0, sticky="w"
     )
 
@@ -101,15 +101,18 @@ def build_ui(app: ctk.CTk) -> UI:
     def show_page(name: str):
         if name == "operation":
             page_operation.tkraise()
+            header.text = "Operation Panel"
         elif name == "status":
             page_status.tkraise()
+            header.text = "System Status"
         else:
             page_faults.tkraise()
+            header.text = "System Faults"
 
     # --------------------------
     # Faults page
     # --------------------------
-    fault_title = ctk.StringVar(value="Faults Detected")
+    fault_title = ctk.StringVar(value="System Faults")
     fault_subtitle = ctk.StringVar(value="No active faults")
 
     ctk.CTkLabel(

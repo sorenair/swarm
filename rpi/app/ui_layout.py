@@ -114,7 +114,6 @@ def build_ui(app: ctk.CTk) -> UI:
     # Faults page
     # --------------------------
     fault_title = ctk.StringVar(value="System Faults")
-    fault_subtitle = ctk.StringVar(value="No active faults")
 
     ctk.CTkLabel(
         page_faults,
@@ -122,12 +121,6 @@ def build_ui(app: ctk.CTk) -> UI:
         font=("SF Pro Display", 36, "bold"),
         text_color="black",
     ).pack(pady=(48, 8))
-    ctk.CTkLabel(
-        page_faults,
-        textvariable=fault_subtitle,
-        font=("SF Pro Text", 16),
-        text_color="gray30",
-    ).pack(pady=(0, 24))
 
     fault_list = ctk.CTkFrame(page_faults, fg_color="transparent")
     fault_list.pack(fill="both", expand=True, padx=40, pady=(0, 48))
@@ -152,14 +145,14 @@ def build_ui(app: ctk.CTk) -> UI:
     def show_fault_overlay(faults):
         count = len(faults)
         if count == 0:
-            fault_subtitle.set("No active faults")
+            fault_title.set("No active faults")
         else:
-            fault_subtitle.set(f"{count} active fault{'s' if count != 1 else ''}")
+            fault_title.set(f"{count} active fault{'s' if count != 1 else ''}")
         _render_faults(faults)
         show_page("faults")
 
     def hide_fault_overlay():
-        fault_subtitle.set("No active faults")
+        fault_title.set("No active faults")
         _render_faults([])
 
     # --------------------------

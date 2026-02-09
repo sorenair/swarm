@@ -16,7 +16,7 @@ DEFAULT_TEMP_F = 100.0
 FAULTS_ENABLED = {
     "temp": True,
     "level": True,
-    "flow": True,
+    "flow": False,
     "lid": True,
     "turbidity": True,
     }

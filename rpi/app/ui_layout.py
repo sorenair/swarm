@@ -91,20 +91,51 @@ def build_ui(app: ctk.CTk) -> UI:
     # --------------------------
     # Fault overlay
     # --------------------------
-    fault_overlay = ctk.CTkFrame(page_container, fg_color="#FFFFFF", corner_radius=16)
+    fault_overlay = ctk.CTkFrame(page_container, fg_color="#FFFFFF", corner_radius=0)
     fault_overlay.place_forget()
 
-    fault_title = ctk.StringVar(value="FAULT DETECTED")
-    fault_detail = ctk.StringVar(value="")
+    fault_title = ctk.StringVar(value="Faults Detected")
+    fault_subtitle = ctk.StringVar(value="")
 
-    ctk.CTkLabel(fault_overlay, textvariable=fault_title,
-                 font=("SF Pro Display", 24, "bold"), text_color="black").pack(pady=(24, 8))
-    ctk.CTkLabel(fault_overlay, textvariable=fault_detail,
-                 font=("SF Pro Text", 14), text_color="black").pack(pady=(0, 24))
+    ctk.CTkLabel(
+        fault_overlay,
+        textvariable=fault_title,
+        font=("SF Pro Display", 36, "bold"),
+        text_color="black",
+    ).pack(pady=(48, 8))
+    ctk.CTkLabel(
+        fault_overlay,
+        textvariable=fault_subtitle,
+        font=("SF Pro Text", 16),
+        text_color="gray30",
+    ).pack(pady=(0, 24))
 
-    def show_fault_overlay(reason: str):
-        fault_detail.set(reason)
-        fault_overlay.place(relx=0.5, rely=0.5, anchor="center")
+    fault_list = ctk.CTkFrame(fault_overlay, fg_color="transparent")
+    fault_list.pack(fill="both", expand=True, padx=40, pady=(0, 48))
+
+    def _render_faults(faults):
+        for child in fault_list.winfo_children():
+            child.destroy()
+
+        for f in faults:
+            title = f.get("title", "Fault")
+            detail = f.get("detail", "")
+            card = ctk.CTkFrame(fault_list, corner_radius=16, fg_color="#F6F7F9")
+            card.pack(fill="x", pady=10)
+            ctk.CTkLabel(
+                card, text=title, font=("SF Pro Display", 22, "bold"), text_color="black"
+            ).pack(anchor="w", padx=18, pady=(14, 4))
+            if detail:
+                ctk.CTkLabel(
+                    card, text=detail, font=("SF Pro Text", 14), text_color="gray30", wraplength=900
+                ).pack(anchor="w", padx=18, pady=(0, 14))
+
+    def show_fault_overlay(faults):
+        count = len(faults)
+        fault_subtitle.set(f"{count} active fault{'s' if count != 1 else ''}")
+        _render_faults(faults)
+        fault_overlay.place(relx=0.5, rely=0.5, anchor="center", relwidth=1.0, relheight=1.0)
+        fault_overlay.lift()
 
     def hide_fault_overlay():
         fault_overlay.place_forget()

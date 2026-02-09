@@ -203,62 +203,73 @@ def main():
 
         ui.refresh_operation_panel()
 
-    def handle_faults(t, ui):
-        """Apply fault handling based on the latest telemetry."""
-        fault = False
+    def detect_faults(t):
+        """Return a dict of active faults keyed by fault id."""
+        faults = {}
         # lid logic (keep your existing behavior)
         if get(FAULTS_ENABLED, "lid"):
             if isinstance(t.lidClosed, bool):
-                if (not t.lidClosed) and ui.heaterEnableVar.get():
-                    ui.heaterEnableVar.set(False)
-                    ui.show_fault_overlay("Lid is open.")
-                    print("Lid fault - heater disabled")
-                    fault = True
-                elif t.lidClosed:
-                    pass
+                if not t.lidClosed:
+                    # Disable heater if lid is open
+                    if ui.heaterEnableVar.get():
+                        ui.heaterEnableVar.set(False)
+                    if t.cycleState == "WASHING":
+                        print("Lid fault - heater disabled")
+                        faults["lid_open"] = {
+                            "title": "Lid is open",
+                            "detail": "Close lid to resume operation.",
+                        }
 
         # level
         if get(FAULTS_ENABLED, "level"):
             if isinstance(t.levelOk, bool):
-                if t.levelOk:
-                    pass
-                else:
-                    ui.show_fault_overlay("Low liquid level - refill required.")
+                if not t.levelOk:
                     print("Level fault")
-                    fault = True
+                    faults["level_low"] = {
+                        "title": "Low liquid level",
+                        "detail": "Refill required before continuing.",
+                    }
 
         # temperature
         if get(FAULTS_ENABLED, "temp"):
             if isinstance(t.F, (int, float)):
-                if t.F < OVERTEMP_F:
-                    pass
-                else:
-                    ui.show_fault_overlay("Temperature exceeded threshold.")
+                if t.F >= OVERTEMP_F:
                     print("Overtemp fault")
-                    fault = True
+                    faults["temp_high"] = {
+                        "title": "Overtemperature",
+                        "detail": "Temperature exceeded threshold.",
+                    }
 
         # turbidity
         if get(FAULTS_ENABLED, "turbidity"):
             if isinstance(t.turbidity_pct, (int, float)):
-                if t.turbidity_pct < TURBIDITY_FAULT_PCT:
-                    pass
-                else:
-                    ui.show_fault_overlay("Turbidity exceeded threshold - change liquid.")
+                if t.turbidity_pct >= TURBIDITY_FAULT_PCT:
                     print("Turbidity fault")
-                    fault = True
+                    faults["turbidity_high"] = {
+                        "title": "High turbidity",
+                        "detail": "Turbidity exceeded threshold.",
+                    }
 
         # flow
         if get(FAULTS_ENABLED, "flow"):
             if isinstance(t.flowLpm, (int, float)):
-                if t.flowLpm > FLOW_FAULT_LPM:
-                    pass
-                else:
-                    ui.show_fault_overlay("Flow below threshold - check pump.")
+                if t.flowLpm <= FLOW_FAULT_LPM:
                     print("Flow fault")
-                    fault = True
-        
-        if not fault:
+                    faults["flow_low"] = {
+                        "title": "Low flow",
+                        "detail": "Flow below threshold.",
+                    }
+
+        return faults
+
+    def handle_faults(t, ui):
+        """Apply fault handling based on the latest telemetry."""
+        faults = detect_faults(t)
+        if not faults:
             ui.hide_fault_overlay()
+            return
+
+        ui.show_fault_overlay(list(faults.values()))
 
     # ------------------------------
     # Poll Serial Queue and Log Data

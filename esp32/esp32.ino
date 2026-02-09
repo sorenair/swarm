@@ -19,7 +19,6 @@ static const char* cycleStateToStr(CycleState s);
 #define MAX_MOSI 23
 #define MAX_MISO 19
 #define MAX_CLK  18
-#define LID_LOCK 21
 
 Adafruit_MAX31865 sensor(MAX_CS, MAX_MOSI, MAX_MISO, MAX_CLK);
 #define RREF 4301.0
@@ -44,8 +43,6 @@ float pulsesToLpm(uint32_t pulses, float dtSeconds)
   const float K = 450.0f; // pulses per liter
   return (pulses / K) / (dtSeconds / 60.0f);
 }
-
-
 
 /////////////////////////////////////////////////////////////////////////////////
 // TUBIDITY (DFRobot SEN0554 UART)
@@ -112,6 +109,18 @@ float ntuEstimateFromPct(uint8_t pct)
 }
 
 /////////////////////////////////////////////////////////////////////////////////
+// FLOAT SWITCH (LEVEL)
+/////////////////////////////////////////////////////////////////////////////////
+
+#define LEVEL_SW 33  // GPIO for float switch input (one lead here, other to GND)
+
+/////////////////////////////////////////////////////////////////////////////////
+// LID INTERLOCK
+/////////////////////////////////////////////////////////////////////////////////
+
+#define LID_LOCK 21 // GPIO for lid interlock switch (one lead here, other to GND)
+
+/////////////////////////////////////////////////////////////////////////////////
 // HEATER
 /////////////////////////////////////////////////////////////////////////////////
 
@@ -122,7 +131,7 @@ uint8_t secOver = 0;
 bool heaterStop = false;
 bool heaterOn = false;
 bool heaterEn = false;
-bool heaterLevel = false;
+//bool heaterLevel = false;
 
 // bang-bang automation
 bool bangBang(float temp_f)
@@ -137,8 +146,6 @@ bool bangBang(float temp_f)
 
 void setHeaterLED(float temp_f, bool requestOn)
 {
-  //NEW STUFF (E-heater shutoff)
-  ///////////////////////////////////////////
   if (isnan(temp_f))  
   {
     heaterOn = false;
@@ -179,22 +186,6 @@ void setHeaterLED(float temp_f, bool requestOn)
   }
 
   digitalWrite(HEATER_LED, heaterOn ? HIGH : LOW);
-  ///////////////////////////////////////////
-  
-  //digitalWrite(HEATER_LED, LOW);
-
-  // Automated heater control
-  /*
-  if (temp_f < 78.00)
-  {
-    digitalWrite(HEATER_LED, HIGH);
-  }
-  else
-  {
-    digitalWrite(HEATER_LED, LOW);
-  }
-  */
-
   
   // FOR TESTING: use float switch to control heater
   bool levelRaw = digitalRead(33);   // HIGH = open, LOW = closed
@@ -206,7 +197,6 @@ void setHeaterLED(float temp_f, bool requestOn)
     digitalWrite(HEATER_LED, LOW);
   }
 }
-
 
 void handleHeaterCommand(const String &line)
 {
@@ -242,7 +232,6 @@ void handleHeaterCommand(const String &line)
   Serial.println("}");
 }
 
-
 /////////////////////////////////////////////////////////////////////////////////
 // PUMP / MOTOR
 /////////////////////////////////////////////////////////////////////////////////
@@ -264,7 +253,6 @@ void motorDrive(uint8_t duty, bool forward)
   digitalWrite(IN2, forward ? LOW : HIGH);
   analogWrite(ENA, duty);
 }
-
 
 void handleMotorCommand(const String &line)
 {
@@ -297,17 +285,6 @@ void handleMotorCommand(const String &line)
     }
   }
 }
-
-
-/////////////////////////////////////////////////////////////////////////////////
-// FLOAT SWITCH (LEVEL)
-/////////////////////////////////////////////////////////////////////////////////
-
-#define LEVEL_SW 33  // GPIO for float switch input (one lead here, other to GND)
-
-/////////////////////////////////////////////////////////////////////////////////
-// SETUP
-/////////////////////////////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////////////////////
 // CYCLE (WASH PROGRAM STATE MACHINE)
@@ -430,6 +407,10 @@ void handleCycleCommand(const String &line)
   Serial.println("{\"ack\":\"CYCLE\",\"err\":\"UNKNOWN\"}");
 }
 
+/////////////////////////////////////////////////////////////////////////////////
+// SETUP AND INITIALIZATION
+/////////////////////////////////////////////////////////////////////////////////
+
 void setup()
 {
   Serial.begin(115200);
@@ -464,8 +445,6 @@ void setup()
   // LID INTERLOCK
   pinMode(LID_LOCK, INPUT_PULLUP);
 }
-
-
 
 /////////////////////////////////////////////////////////////////////////////////
 // MAIN LOOP
@@ -514,7 +493,6 @@ void loop()
         cycleApplyOutputsForState();
       }
     }
-
     
     // HEATER
     bool demandHeat = false;
@@ -550,12 +528,11 @@ void loop()
       Serial.print(",\"turbPct\":null,\"ntu\":null");
     }
 
-    // add float switch status
+    // Float switch status
     Serial.print(",\"levelOk\":");
     Serial.print(levelOk ? "true" : "false");
 
-    //NEW HEATER SHUTOFF STUFF
-    ///////////////////////////////////////////////////////////////
+    // Heater Status
     Serial.print(",\"heaterEnable\":");
     Serial.print(heaterEn ? "true" : "false");
 
@@ -576,9 +553,8 @@ void loop()
 
     Serial.print(",\"heaterStop\":");
     Serial.print(heaterStop ? "true" : "false");
-    ///////////////////////////////////////////////////////////////
 
-    //LID STUFF
+    // Lid Interlock Status
     Serial.print(",\"lidClosed\":");
     Serial.print(lidClosed ? "true" : "false");
 
@@ -596,7 +572,7 @@ void loop()
     Serial.println("}");
   }
 
-  // MOTOR + PING HANDLER
+  // Rx Command Handling from RPi
   if (Serial.available())
   {
     String line = Serial.readStringUntil('\n');

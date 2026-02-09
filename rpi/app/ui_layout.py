@@ -94,7 +94,7 @@ def build_ui(app: ctk.CTk) -> UI:
     fault_overlay = ctk.CTkFrame(page_container, fg_color="#FFFFFF", corner_radius=16)
     fault_overlay.place_forget()
 
-    fault_title = ctk.StringVar(value="Communication fault")
+    fault_title = ctk.StringVar(value="FAULT DETECTED")
     fault_detail = ctk.StringVar(value="")
 
     ctk.CTkLabel(fault_overlay, textvariable=fault_title,
@@ -183,7 +183,7 @@ def build_ui(app: ctk.CTk) -> UI:
 
     # Setpoints
     set_card.grid_columnconfigure(1, weight=1)
-    ctk.CTkLabel(set_card, text="Setpoints", font=("SF Pro Text", 16, "bold")).grid(
+    ctk.CTkLabel(set_card, text="Cycle Configuration", font=("SF Pro Text", 16, "bold")).grid(
         row=0, column=0, columnspan=2, sticky="w", padx=14, pady=(14, 10)
     )
     ctk.CTkLabel(set_card, text="Cycle Duration (min)", font=("SF Pro Text", 13), text_color="gray30").grid(

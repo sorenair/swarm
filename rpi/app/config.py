@@ -11,3 +11,15 @@ LOG_DIR = "logs"
 # UI defaults
 DEFAULT_CYCLE_MIN = 10.0
 DEFAULT_TEMP_F = 100.0
+
+# Faults
+FAULTS_ENABLED = {
+    "temp": True,
+    "level": True,
+    "flow": True,
+    "lid": True,
+    "turbidity": True,
+    }
+OVERTEMP_F = 100.0                     # over-temperature threshold for fault screen
+TURBIDITY_FAULT_PCT = 80.0            # turbidity threshold for fault screen
+FLOW_FAULT_LPM = 0.5                  # flow threshold for fault screen

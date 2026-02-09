@@ -3,7 +3,7 @@ import queue, time, os
 from datetime import datetime
 import customtkinter as ctk
 
-from app.config import PORT, BAUD, ENABLE_FAULT_SCREEN, RX_TIMEOUT_S, LOG_DIR
+from app.config import PORT, BAUD, ENABLE_FAULT_SCREEN, RX_TIMEOUT_S, LOG_DIR, OVERTEMP_F, TURBIDITY_FAULT_PCT, FLOW_FAULT_LPM, FAULTS_ENABLED
 from app.comms import SerialClient
 from app.state import AppModel
 from app.protocol import parse_line, get, apply_message
@@ -55,7 +55,7 @@ def main():
     ui = build_ui(app)
 
     # ------------------------------------------
-    # Open Serial Client + Machine Controller
+    # Serial Client + Machine Controller
     # ------------------------------------------
     q = queue.Queue()
 
@@ -91,9 +91,6 @@ def main():
 
         app.after(250, comms_watchdog)
 
-    # ------------------------
-    # Connect UI to Controller
-    # ------------------------
     def on_close(_=None):
         try:
             logger.stop()
@@ -106,6 +103,9 @@ def main():
 
         app.destroy()
 
+    # ------------------------
+    # Connect UI to Controller
+    # ------------------------
     def start_cycle():
         if ui.cycle_state.get() in ("WASHING", "PAUSED"):
             return
@@ -158,6 +158,12 @@ def main():
         else:
             ui.tempSetF.set("Set: —")
 
+        if isinstance(t.lidClosed, bool):
+            ui.lidText.set("Lid is closed" if t.lidClosed else "Lid is open")
+
+        if isinstance(t.levelOk, bool):
+            ui.levelText.set("OK" if t.levelOk else "LOW / FAULT")
+
         # cycle
         if isinstance(t.cycleState, str) and t.cycleState:
             ui.cycle_state.set(t.cycleState)
@@ -166,27 +172,8 @@ def main():
                 ui.cycle_remaining_s.set(int(float(t.cycleRemainingS)))
             except Exception:
                 pass
-        #if t.cycleTempSetF is not None:
-        #    try:
-        #        ui.cycle_temp_set_f_in.set(float(t.cycleTempSetF))
-        #    except Exception:
-        #        pass
 
-        # lid logic (keep your existing behavior)
-        if isinstance(t.lidClosed, bool):
-            ui.lidText.set("Lid is closed" if t.lidClosed else "Lid is open")
-            if (not t.lidClosed) and ui.heaterEnableVar.get():
-                ui.heaterEnableVar.set(False)
-        else:
-            ui.lidText.set("Lid status error!")
-
-        # level
-        if t.levelOk is None:
-            ui.levelText.set("—")
-        elif t.levelOk:
-            ui.levelText.set("OK")
-        else:
-            ui.levelText.set("LOW / FAULT")
+        handle_faults(t, ui)
 
         # heater enable (ESP32 authoritative)
         if isinstance(t.heaterEnable, bool):
@@ -219,6 +206,49 @@ def main():
             ui.heaterWarnText.set("")
 
         ui.refresh_operation_panel()
+
+    def handle_faults(t, ui):
+        """Apply fault handling based on the latest telemetry."""
+        # lid logic (keep your existing behavior)
+        if get(FAULTS_ENABLED, "lid"):
+            if isinstance(t.lidClosed, bool):
+                if (not t.lidClosed) and ui.heaterEnableVar.get():
+                    ui.heaterEnableVar.set(False)
+                    ui.show_fault_overlay("Lid is open.")
+                elif t.lidClosed:
+                    ui.hide_fault_overlay()
+
+        # level
+        if get(FAULTS_ENABLED, "level"):
+            if isinstance(t.levelOk, bool):
+                if t.levelOk:
+                    ui.hide_fault_overlay()
+                else:
+                    ui.show_fault_overlay("Low liquid level - refill required.")
+
+        # temperature
+        if get(FAULTS_ENABLED, "temp"):
+            if isinstance(t.F, (int, float)):
+                if t.F < OVERTEMP_F:
+                    ui.hide_fault_overlay()
+                else:
+                    ui.show_fault_overlay("Temperature exceeded threshold.")
+
+        # turbidity
+        if get(FAULTS_ENABLED, "turbidity"):
+            if isinstance(t.turbidity_pct, (int, float)):
+                if t.turbidity_pct < TURBIDITY_FAULT_PCT:
+                    ui.hide_fault_overlay()
+                else:
+                    ui.show_fault_overlay("Turbidity exceeded threshold - change liquid.")
+
+        # flow
+        if get(FAULTS_ENABLED, "flow"):
+            if isinstance(t.flowLpm, (int, float)):
+                if t.flowLpm > FLOW_FAULT_LPM:
+                    ui.hide_fault_overlay()
+                else:
+                    ui.show_fault_overlay("Flow below threshold - check pump.")
 
     # ------------------------------
     # Poll Serial Queue and Log Data

@@ -214,7 +214,6 @@ def main():
                     if ui.heaterEnableVar.get():
                         ui.heaterEnableVar.set(False)
                     if t.cycleState == "WASHING":
-                        print("Lid fault - heater disabled")
                         faults["lid_open"] = {
                             "title": "Lid is open",
                             "detail": "Close lid to resume operation.",
@@ -224,7 +223,6 @@ def main():
         if get(FAULTS_ENABLED, "level"):
             if isinstance(t.levelOk, bool):
                 if not t.levelOk:
-                    print("Level fault")
                     faults["level_low"] = {
                         "title": "Low liquid level",
                         "detail": "Refill required before continuing.",
@@ -234,7 +232,6 @@ def main():
         if get(FAULTS_ENABLED, "temp"):
             if isinstance(t.F, (int, float)):
                 if t.F >= OVERTEMP_F:
-                    print("Overtemp fault")
                     faults["temp_high"] = {
                         "title": "Overtemperature",
                         "detail": "Temperature exceeded threshold.",
@@ -244,7 +241,6 @@ def main():
         if get(FAULTS_ENABLED, "turbidity"):
             if isinstance(t.turbidity_pct, (int, float)):
                 if t.turbidity_pct >= TURBIDITY_FAULT_PCT:
-                    print("Turbidity fault")
                     faults["turbidity_high"] = {
                         "title": "High turbidity",
                         "detail": "Turbidity exceeded threshold.",
@@ -254,7 +250,6 @@ def main():
         if get(FAULTS_ENABLED, "flow"):
             if isinstance(t.flowLpm, (int, float)):
                 if t.flowLpm <= FLOW_FAULT_LPM:
-                    print("Flow fault")
                     faults["flow_low"] = {
                         "title": "Low flow",
                         "detail": "Flow below threshold.",

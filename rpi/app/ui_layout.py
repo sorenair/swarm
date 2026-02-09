@@ -89,28 +89,43 @@ def build_ui(app: ctk.CTk) -> UI:
     page_container.grid_columnconfigure(0, weight=1)
 
     # --------------------------
-    # Fault overlay
+    # Pages
     # --------------------------
-    fault_overlay = ctk.CTkFrame(page_container, fg_color="#FFFFFF", corner_radius=0)
-    fault_overlay.place_forget()
+    page_operation = ctk.CTkFrame(page_container, corner_radius=0, fg_color="white")
+    page_status    = ctk.CTkFrame(page_container, corner_radius=0, fg_color="white")
+    page_faults    = ctk.CTkFrame(page_container, corner_radius=0, fg_color="white")
 
+    for p in (page_operation, page_status, page_faults):
+        p.grid(row=0, column=0, sticky="nsew")
+
+    def show_page(name: str):
+        if name == "operation":
+            page_operation.tkraise()
+        elif name == "status":
+            page_status.tkraise()
+        else:
+            page_faults.tkraise()
+
+    # --------------------------
+    # Faults page
+    # --------------------------
     fault_title = ctk.StringVar(value="Faults Detected")
-    fault_subtitle = ctk.StringVar(value="")
+    fault_subtitle = ctk.StringVar(value="No active faults")
 
     ctk.CTkLabel(
-        fault_overlay,
+        page_faults,
         textvariable=fault_title,
         font=("SF Pro Display", 36, "bold"),
         text_color="black",
     ).pack(pady=(48, 8))
     ctk.CTkLabel(
-        fault_overlay,
+        page_faults,
         textvariable=fault_subtitle,
         font=("SF Pro Text", 16),
         text_color="gray30",
     ).pack(pady=(0, 24))
 
-    fault_list = ctk.CTkFrame(fault_overlay, fg_color="transparent")
+    fault_list = ctk.CTkFrame(page_faults, fg_color="transparent")
     fault_list.pack(fill="both", expand=True, padx=40, pady=(0, 48))
 
     def _render_faults(faults):
@@ -132,28 +147,16 @@ def build_ui(app: ctk.CTk) -> UI:
 
     def show_fault_overlay(faults):
         count = len(faults)
-        fault_subtitle.set(f"{count} active fault{'s' if count != 1 else ''}")
+        if count == 0:
+            fault_subtitle.set("No active faults")
+        else:
+            fault_subtitle.set(f"{count} active fault{'s' if count != 1 else ''}")
         _render_faults(faults)
-        fault_overlay.place(relx=0.5, rely=0.5, anchor="center", relwidth=1.0, relheight=1.0)
-        fault_overlay.lift()
+        show_page("faults")
 
     def hide_fault_overlay():
-        fault_overlay.place_forget()
-
-    # --------------------------
-    # Pages
-    # --------------------------
-    page_operation = ctk.CTkFrame(page_container, corner_radius=0, fg_color="white")
-    page_status    = ctk.CTkFrame(page_container, corner_radius=0, fg_color="white")
-
-    for p in (page_operation, page_status):
-        p.grid(row=0, column=0, sticky="nsew")
-
-    def show_page(name: str):
-        if name == "operation":
-            page_operation.tkraise()
-        else:
-            page_status.tkraise()
+        fault_subtitle.set("No active faults")
+        _render_faults([])
 
     # --------------------------
     # Left navigation
@@ -165,7 +168,7 @@ def build_ui(app: ctk.CTk) -> UI:
     nav_btns = ctk.CTkFrame(nav, corner_radius=0, fg_color="transparent")
     nav_btns.pack(fill="both", expand=True, padx=0, pady=0)
     nav_btns.grid_rowconfigure(0, weight=1)
-    nav_btns.grid_rowconfigure(3, weight=1)
+    nav_btns.grid_rowconfigure(4, weight=1)
     nav_btns.grid_columnconfigure(0, weight=1)
 
     def nav_button(parent, text, command):
@@ -179,7 +182,8 @@ def build_ui(app: ctk.CTk) -> UI:
     ctk.CTkFrame(nav_btns, fg_color="transparent").grid(row=0, column=0, sticky="nsew")
     nav_button(nav_btns, "Operation", lambda: show_page("operation")).grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 10))
     nav_button(nav_btns, "Status",    lambda: show_page("status")).grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 10))
-    ctk.CTkFrame(nav_btns, fg_color="transparent").grid(row=3, column=0, sticky="nsew")
+    nav_button(nav_btns, "Faults",    lambda: show_page("faults")).grid(row=3, column=0, sticky="ew", padx=12, pady=(0, 10))
+    ctk.CTkFrame(nav_btns, fg_color="transparent").grid(row=4, column=0, sticky="nsew")
 
     # --------------------------
     # Vars (moved from main)

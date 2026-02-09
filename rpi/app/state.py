@@ -1,9 +1,10 @@
-# app/state.py
+"""State containers for telemetry and application status."""
 from dataclasses import dataclass, field
 from typing import Optional, Any, Dict
 
 @dataclass
 class Telemetry:
+    """Live telemetry values received from the controller."""
     # core
     ok: bool = False
     C: str = ""
@@ -32,6 +33,7 @@ class Telemetry:
 
 @dataclass
 class AppModel:
+    """Top-level model for UI rendering and status tracking."""
     status_line: str = ""
     last_ack: str = ""
     telemetry: Telemetry = field(default_factory=Telemetry)

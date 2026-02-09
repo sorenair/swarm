@@ -1,3 +1,5 @@
+"""Configuration values for the SWARM Raspberry Pi UI."""
+
 PORT = "/dev/ttyUSB0"
 BAUD = 115200
 

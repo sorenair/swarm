@@ -1,4 +1,4 @@
-# app/log_async.py
+"""Async logging utilities for telemetry and UI events."""
 import os, csv, time, queue, threading
 from typing import Any, Dict, List, Optional
 from datetime import datetime
@@ -10,7 +10,9 @@ from app.state import AppModel
 
 
 class AsyncLogger:
+    """Append structured log rows to CSV and XLSX on a background thread."""
     def __init__(self, xlsx_path: str, csv_path: str, event_headers: List[str]):
+        """Initialize the logger and start the background worker."""
         self.xlsx_path = xlsx_path
         self.csv_path = csv_path
         self.event_headers = event_headers
@@ -25,11 +27,13 @@ class AsyncLogger:
         self.t.start()
 
     def _init_csv(self):
+        """Create the CSV log file with headers if needed."""
         if not os.path.exists(self.csv_path):
             with open(self.csv_path, "w", newline="", encoding="utf-8") as f:
                 csv.writer(f).writerow(self.event_headers)
 
     def _init_xlsx(self):
+        """Create the XLSX log file and worksheets if needed."""
         if os.path.exists(self.xlsx_path):
             return
 
@@ -51,19 +55,24 @@ class AsyncLogger:
         wb.save(self.xlsx_path)
 
     def log_event(self, row: dict):
+        """Queue a single event row for persistence."""
         self.lq.put(row)
 
     # Convenience wrappers so main.py stays clean
     def log_status(self, timestamp: str, msg: str):
+        """Record a status message in the event log."""
         self.log_event({"timestamp": timestamp, "event_type": "status", "raw": msg})
 
     def log_rx(self, timestamp: str, raw_line: str):
+        """Record a raw RX line in the event log."""
         self.log_event({"timestamp": timestamp, "event_type": "rx_raw", "raw": raw_line})
 
     def log_tx(self, timestamp: str, cmd: str):
+        """Record a TX command in the event log."""
         self.log_event({"timestamp": timestamp, "event_type": "tx_cmd", "raw": cmd})
 
     def _append_xlsx(self, batch_rows: List[dict]):
+        """Append a batch of event rows to the XLSX file."""
         wb = load_workbook(self.xlsx_path)
         ws_events = wb["Events"]
         ws_rx = wb["RxRaw"]
@@ -84,12 +93,14 @@ class AsyncLogger:
         wb.save(self.xlsx_path)
 
     def _append_csv(self, batch_rows: List[dict]):
+        """Append a batch of event rows to the CSV file."""
         with open(self.csv_path, "a", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             for r in batch_rows:
                 w.writerow([r.get(k, "") for k in self.event_headers])
 
     def _worker(self):
+        """Batch events and flush to disk on size or time thresholds."""
         batch: List[dict] = []
         last_flush = time.time()
         FLUSH_EVERY_SEC = 2.0
@@ -121,12 +132,15 @@ class AsyncLogger:
                 last_flush = time.time()
 
     def stop(self):
+        """Signal the worker thread to stop."""
         self.stop_flag.set()
 
 def now_iso():
+    """Return a millisecond-precision timestamp string."""
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
 def log_telemetry(logger: AsyncLogger, model: AppModel, ui: Dict[str, Any]) -> None:
+    """Emit a telemetry event row from the current model state."""
     t = model.telemetry
     if not t.ok:
         return
@@ -160,6 +174,7 @@ def log_telemetry(logger: AsyncLogger, model: AppModel, ui: Dict[str, Any]) -> N
     })
 
 def log_cycle_snapshot(logger: AsyncLogger, ui: Dict[str, Any]) -> None:
+    """Record the current UI cycle configuration and state."""
     logger.log_event({
         "timestamp": now_iso(),
         "event_type": "status",

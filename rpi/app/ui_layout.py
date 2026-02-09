@@ -1,10 +1,11 @@
-# app/ui_layout.py
+"""UI layout construction for the SWARM control panel."""
 from dataclasses import dataclass
 import customtkinter as ctk
 from app.config import DEFAULT_TEMP_F, DEFAULT_CYCLE_MIN
 
 @dataclass
 class UI:
+    """Container for UI variables, widgets, and callbacks."""
     app: ctk.CTk
 
     # top status (header right)
@@ -51,6 +52,7 @@ class UI:
 
 
 def build_ui(app: ctk.CTk) -> UI:
+    """Build the full UI layout and return bound UI handles."""
     # --------------------------
     # Top-level shell
     # --------------------------

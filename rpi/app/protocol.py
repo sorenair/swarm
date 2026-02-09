@@ -1,12 +1,10 @@
-# app/protocol.py
+"""Helpers for parsing and applying ESP32 protocol messages."""
 import json
 from typing import Any, Dict, Optional
 from app.state import AppModel
 
 def parse_line(line: str) -> Optional[Dict[str, Any]]:
-    """
-    Returns a dict if line is valid JSON object, otherwise None.
-    """
+    """Return a dict if the line is a valid JSON object."""
     try:
         msg = json.loads(line)
         if isinstance(msg, dict):
@@ -16,12 +14,11 @@ def parse_line(line: str) -> Optional[Dict[str, Any]]:
         return None
 
 def get(msg: Dict[str, Any], key: str, default=None):
-    """
-    Convenience getter. Avoids KeyError and keeps main code cleaner.
-    """
+    """Return a key from the message with a default fallback."""
     return msg.get(key, default)
 
 def apply_message(model: AppModel, m: Dict[str, Any]) -> None:
+    """Apply a decoded message to the in-memory model."""
     # status/ack
     if "ack" in m:
         ack = f"ACK: {m.get('ack')} {m.get('cmd','')}".strip()

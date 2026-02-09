@@ -1,4 +1,4 @@
-# main.py
+"""Main entry point for the SWARM Raspberry Pi UI application."""
 import queue, time, os
 from datetime import datetime
 import customtkinter as ctk
@@ -17,6 +17,7 @@ from app.ui_layout import build_ui
 os.makedirs(LOG_DIR, exist_ok=True)
 
 def log_base_name():
+    """Return the base filename for daily log artifacts."""
     return f"swarm_log_{datetime.now().strftime('%Y-%m-%d')}"
 
 XLSX_PATH = os.path.join(LOG_DIR, log_base_name() + ".xlsx")
@@ -39,6 +40,7 @@ logger = AsyncLogger(XLSX_PATH, CSV_PATH, EVENT_HEADERS)
 # Main App
 # --------
 def main():
+    """Initialize the UI, comms, controller, and event loops."""
     # --------------
     # Instantiate UI
     # --------------

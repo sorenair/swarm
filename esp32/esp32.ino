@@ -244,7 +244,7 @@ void handleHeaterCommand(const String &line)
 
 
 /////////////////////////////////////////////////////////////////////////////////
-// MOTOR
+// PUMP / MOTOR
 /////////////////////////////////////////////////////////////////////////////////
 
 #define ENA 25  // PWM
@@ -317,7 +317,7 @@ CycleState cycleState = CYCLE_IDLE;
 int32_t cycleRemainingS = 0;
 
 // Defaults for wash behavior (tune for your machine)
-uint8_t cycleMotorDuty = 200;     // 0..255
+uint8_t cycleMotorDuty = 100;     // 0..255
 bool cycleMotorFwd = true;
 
 static const char* cycleStateToStr(CycleState s)
@@ -345,7 +345,7 @@ void cycleApplyOutputsForState()
   {
     // Heater remains subject to lidClosed + bang-bang + overtemp shutoff in loop()
     heaterEn = true;
-    //motorDrive(cycleMotorDuty, cycleMotorFwd);
+    motorDrive(cycleMotorDuty, cycleMotorFwd);
   }
   else if (cycleState == CYCLE_PAUSED)
   {

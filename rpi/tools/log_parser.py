@@ -1,11 +1,11 @@
-# parse_rx_to_columns.py
-# Reads an input log .xlsx, parses the "RxRaw" sheet JSON lines, writes a new .xlsx
-#
-# Usage:
-#   python3 parse_rx_to_columns.py swarm_log_2026-02-04.xlsx swarm_log_2026-02-04_parsed_rx.xlsx
-#
-# Requirements:
-#   pip install pandas openpyxl
+"""Parse RX JSON lines from a log workbook into flat columns.
+
+Usage:
+  python3 parse_rx_to_columns.py swarm_log_YYYY-MM-DD.xlsx swarm_log_YYYY-MM-DD_parsed_rx.xlsx
+
+Requirements:
+  pip install pandas openpyxl
+"""
 
 import sys
 import json
@@ -14,10 +14,7 @@ import pandas as pd
 RX_SHEET_NAME = "RxRaw"
 
 def flatten(d, parent_key="", sep="."):
-    """
-    Flattens nested dicts into dot-notation keys.
-    Lists are stored as JSON strings.
-    """
+    """Flatten nested mappings into dot-notation keys."""
     out = {}
     if isinstance(d, dict):
         for k, v in d.items():
@@ -33,6 +30,7 @@ def flatten(d, parent_key="", sep="."):
     return out
 
 def main(in_path: str, out_path: str):
+    """Read the log workbook and write the parsed output workbook."""
     rx = pd.read_excel(in_path, sheet_name=RX_SHEET_NAME)
     rx.columns = [c.strip() for c in rx.columns]
 

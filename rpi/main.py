@@ -262,9 +262,19 @@ def main():
 
         return faults
 
+    last_faults_snapshot = None
+
     def handle_faults(t, ui):
         """Apply fault handling based on the latest telemetry."""
+        nonlocal last_faults_snapshot
         faults = detect_faults(t)
+        snapshot = tuple(sorted((k, v.get("title", ""), v.get("detail", "")) for k, v in faults.items()))
+
+        if snapshot == last_faults_snapshot:
+            return
+
+        last_faults_snapshot = snapshot
+
         if not faults:
             ui.hide_fault_overlay()
             return

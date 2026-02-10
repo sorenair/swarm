@@ -50,7 +50,7 @@ def main():
 
     app = ctk.CTk()
     app.update_idletasks()
-    app.attributes("-fullscreen", False)
+    app.attributes("-fullscreen", True)
     app.title("SWARM")
 
     ui = build_ui(app)

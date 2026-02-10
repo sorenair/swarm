@@ -1,5 +1,6 @@
 """UI layout construction for the SWARM control panel."""
 from dataclasses import dataclass
+from typing import Optional, Callable
 import customtkinter as ctk
 from app.config import DEFAULT_TEMP_F, DEFAULT_CYCLE_MIN
 
@@ -223,23 +224,206 @@ def build_ui(app: ctk.CTk) -> UI:
     set_card = ctk.CTkFrame(page_operation, corner_radius=16)
     time_card = ctk.CTkFrame(page_operation, corner_radius=16)
 
-    # Setpoints
-    set_card.grid_columnconfigure(1, weight=1)
+    # Setpoints (touch-friendly)
+    set_card.grid_columnconfigure(0, weight=1)
     ctk.CTkLabel(set_card, text="Cycle Configuration", font=("SF Pro Text", 16, "bold")).grid(
-        row=0, column=0, columnspan=2, sticky="w", padx=14, pady=(14, 10)
+        row=0, column=0, sticky="w", padx=14, pady=(14, 10)
     )
-    ctk.CTkLabel(set_card, text="Cycle Duration (min)", font=("SF Pro Text", 13), text_color="gray30").grid(
-        row=1, column=0, sticky="w", padx=14, pady=(0, 6)
+
+    def _open_numeric_popup(
+        title: str,
+        value_var: ctk.Variable,
+        unit: str,
+        step: float,
+        min_value: Optional[float] = None,
+        max_value: Optional[float] = None,
+        formatter: Optional[Callable[[float], str]] = None,
+    ):
+        popup = ctk.CTkToplevel(app)
+        popup.attributes("-fullscreen", True)
+        popup.configure(fg_color="#FFFFFF")
+        popup.grab_set()
+
+        def clamp(v: float) -> float:
+            if min_value is not None:
+                v = max(min_value, v)
+            if max_value is not None:
+                v = min(max_value, v)
+            return v
+
+        try:
+            current_value = float(value_var.get())
+        except Exception:
+            current_value = 0.0
+        current_value = clamp(current_value)
+
+        display_value = ctk.StringVar()
+
+        def format_value(v: float) -> str:
+            if formatter:
+                return formatter(v)
+            if unit:
+                return f"{v:g} {unit}"
+            return f"{v:g}"
+
+        def update_display():
+            display_value.set(format_value(current_value))
+
+        def on_inc():
+            nonlocal current_value
+            current_value = clamp(current_value + step)
+            update_display()
+
+        def on_dec():
+            nonlocal current_value
+            current_value = clamp(current_value - step)
+            update_display()
+
+        def on_set():
+            if isinstance(value_var, ctk.IntVar):
+                value_var.set(int(round(current_value)))
+            else:
+                value_var.set(float(current_value))
+            popup.grab_release()
+            popup.destroy()
+
+        def on_cancel():
+            popup.grab_release()
+            popup.destroy()
+
+        popup.grid_columnconfigure(0, weight=1)
+        popup.grid_rowconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            popup,
+            text=title,
+            font=("SF Pro Display", 30, "bold"),
+            text_color="black",
+        ).grid(row=0, column=0, sticky="ew", padx=28, pady=(28, 10))
+
+        value_frame = ctk.CTkFrame(popup, corner_radius=20, fg_color="#F6F7F9")
+        value_frame.grid(row=1, column=0, sticky="nsew", padx=28, pady=10)
+        value_frame.grid_columnconfigure((0, 2), weight=1)
+        value_frame.grid_rowconfigure(0, weight=1)
+
+        btn_style = dict(height=120, width=160, corner_radius=18, fg_color="#FFFFFF", text_color="black")
+
+        ctk.CTkButton(
+            value_frame, text="−", font=("SF Pro Display", 64, "bold"), command=on_dec, **btn_style
+        ).grid(row=0, column=0, padx=24, pady=24, sticky="nsew")
+
+        ctk.CTkLabel(
+            value_frame, textvariable=display_value, font=("SF Pro Display", 54, "bold"), text_color="black"
+        ).grid(row=0, column=1, padx=20, pady=24)
+
+        ctk.CTkButton(
+            value_frame, text="+", font=("SF Pro Display", 64, "bold"), command=on_inc, **btn_style
+        ).grid(row=0, column=2, padx=24, pady=24, sticky="nsew")
+
+        action_frame = ctk.CTkFrame(popup, corner_radius=0, fg_color="white")
+        action_frame.grid(row=2, column=0, sticky="ew", padx=28, pady=(10, 28))
+        action_frame.grid_columnconfigure((0, 1), weight=1)
+
+        ctk.CTkButton(
+            action_frame,
+            text="Cancel",
+            font=("SF Pro Text", 24, "bold"),
+            height=70,
+            corner_radius=18,
+            fg_color="#EDEFF3",
+            text_color="black",
+            command=on_cancel,
+        ).grid(row=0, column=0, padx=(0, 12), sticky="ew")
+
+        ctk.CTkButton(
+            action_frame,
+            text="Set",
+            font=("SF Pro Text", 24, "bold"),
+            height=70,
+            corner_radius=18,
+            command=on_set,
+        ).grid(row=0, column=1, padx=(12, 0), sticky="ew")
+
+        update_display()
+
+    subcards = ctk.CTkFrame(set_card, corner_radius=0, fg_color="transparent")
+    subcards.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 14))
+    subcards.grid_columnconfigure((0, 1), weight=1)
+
+    duration_card = ctk.CTkFrame(subcards, corner_radius=16, fg_color="#F6F7F9")
+    duration_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+    duration_card.grid_columnconfigure(0, weight=1)
+
+    ctk.CTkLabel(duration_card, text="Duration", font=("SF Pro Text", 14, "bold"), text_color="black").grid(
+        row=0, column=0, sticky="w", padx=14, pady=(12, 4)
     )
-    ctk.CTkEntry(set_card, textvariable=cycle_duration_min_in, width=120).grid(
-        row=1, column=1, sticky="e", padx=14, pady=(0, 6)
+
+    duration_text = ctk.StringVar(value=f"{cycle_duration_min_in.get():g} min")
+    ctk.CTkLabel(duration_card, textvariable=duration_text, font=("SF Pro Display", 30, "bold"), text_color="black").grid(
+        row=1, column=0, sticky="w", padx=14, pady=(0, 10)
     )
-    ctk.CTkLabel(set_card, text="Temperature Setpoint (°F)", font=("SF Pro Text", 13), text_color="gray30").grid(
-        row=2, column=0, sticky="w", padx=14, pady=(0, 14)
+
+    ctk.CTkButton(
+        duration_card,
+        text="Change",
+        font=("SF Pro Text", 18, "bold"),
+        height=48,
+        corner_radius=12,
+        command=lambda: _open_numeric_popup(
+            title="Set Cycle Duration",
+            value_var=cycle_duration_min_in,
+            unit="min",
+            step=1.0,
+            min_value=0.0,
+            formatter=lambda v: f"{int(round(v))} min",
+        ),
+    ).grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 12))
+
+    temp_card = ctk.CTkFrame(subcards, corner_radius=16, fg_color="#F6F7F9")
+    temp_card.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+    temp_card.grid_columnconfigure(0, weight=1)
+
+    ctk.CTkLabel(temp_card, text="Set Temp", font=("SF Pro Text", 14, "bold"), text_color="black").grid(
+        row=0, column=0, sticky="w", padx=14, pady=(12, 4)
     )
-    ctk.CTkEntry(set_card, textvariable=cycle_temp_set_f_in, width=120).grid(
-        row=2, column=1, sticky="e", padx=14, pady=(0, 14)
+
+    temp_text = ctk.StringVar(value=f"{cycle_temp_set_f_in.get():.1f} °F")
+    ctk.CTkLabel(temp_card, textvariable=temp_text, font=("SF Pro Display", 30, "bold"), text_color="black").grid(
+        row=1, column=0, sticky="w", padx=14, pady=(0, 10)
     )
+
+    ctk.CTkButton(
+        temp_card,
+        text="Change",
+        font=("SF Pro Text", 18, "bold"),
+        height=48,
+        corner_radius=12,
+        command=lambda: _open_numeric_popup(
+            title="Set Temperature",
+            value_var=cycle_temp_set_f_in,
+            unit="°F",
+            step=1.0,
+            min_value=0.0,
+            formatter=lambda v: f"{v:.1f} °F",
+        ),
+    ).grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 12))
+
+    def _on_duration_changed(*_):
+        try:
+            duration_text.set(f"{float(cycle_duration_min_in.get()):g} min")
+        except Exception:
+            duration_text.set("—")
+
+    def _on_temp_changed(*_):
+        try:
+            temp_text.set(f"{float(cycle_temp_set_f_in.get()):.1f} °F")
+        except Exception:
+            temp_text.set("—")
+
+    cycle_duration_min_in.trace_add("write", _on_duration_changed)
+    cycle_temp_set_f_in.trace_add("write", _on_temp_changed)
+    _on_duration_changed()
+    _on_temp_changed()
 
     # Time Remaining
     time_card.grid_columnconfigure(0, weight=1)

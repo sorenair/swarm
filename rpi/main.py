@@ -26,12 +26,13 @@ EVENT_HEADERS = [
     "timestamp",
     "event_type",
     "raw",
-    "C", "F", "flowLpm", "turbidity_pct", "NTU",
-    "heaterEnable", "setTempF", "heaterDemand", "heaterOn",
+    "cycle_state", "cycle_duration_s", "cycle_remaining_s",
+    "setTempF",
+    "F", "flowLpm", "turbidity_pct", "NTU",
+    "heaterEnable", "heaterDemand", "heaterOn",
     "overTemp", "secOver", "heaterStop",
     "levelOk", "lidClosed",
-    "ui_heater_enable",
-    "ui_cycle_state", "ui_cycle_remaining_s", "ui_cycle_duration_s", "ui_cycle_temp_set_f",
+    "active_faults",
 ]
 
 logger = AsyncLogger(XLSX_PATH, CSV_PATH, EVENT_HEADERS)
@@ -203,6 +204,8 @@ def main():
 
         ui.refresh_operation_panel()
 
+    active_faults = []
+
     def detect_faults(t):
         """Return a dict of active faults keyed by fault id."""
         faults = {}
@@ -261,8 +264,9 @@ def main():
 
     def handle_faults(t, ui):
         """Apply fault handling based on the latest telemetry."""
-        nonlocal last_faults_snapshot
+        nonlocal last_faults_snapshot, active_faults
         faults = detect_faults(t)
+        active_faults = list(faults.keys())
         snapshot = tuple(sorted((k, v.get("title", ""), v.get("detail", "")) for k, v in faults.items()))
 
         if snapshot == last_faults_snapshot:
@@ -308,28 +312,33 @@ def main():
                 t = model.telemetry
                 if t.ok:
                     logger.log_event({
+                        # Metadata
                         "timestamp": now_iso(),
                         "event_type": "telemetry",
                         "raw": "",
-                        "C": t.C,
+                        # Cycle state fields
+                        "cycle_state": ui.cycle_state.get(),
+                        "cycle_duration_s": int(ui.cycle_duration_min_in.get() * 60),
+                        "cycle_remaining_s": ui.cycle_remaining_s.get(),
+                        #"cycle_temp_set_f": float(ui.cycle_temp_set_f_in.get())
+                        "setTempF": t.setTempF,
+                        # Telemetry fields
                         "F": t.F,
                         "flowLpm": t.flowLpm,
                         "turbidity_pct": t.turbidity_pct,
                         "NTU": t.NTU,
+                        # Heater state fields
                         "heaterEnable": t.heaterEnable,
-                        "setTempF": t.setTempF,
+                        #"ui_heater_enable": ui.heaterEnableVar.get(),
                         "heaterDemand": t.heaterDemand,
                         "heaterOn": t.heaterOn,
+                        "heaterStop": t.heaterStop,
+                        # Fault fields
                         "overTemp": t.overTemp,
                         "secOver": t.secOver,
-                        "heaterStop": t.heaterStop,
                         "levelOk": t.levelOk,
                         "lidClosed": t.lidClosed,
-                        "ui_heater_enable": ui.heaterEnableVar.get(),
-                        "ui_cycle_state": ui.cycle_state.get(),
-                        "ui_cycle_remaining_s": ui.cycle_remaining_s.get(),
-                        "ui_cycle_duration_s": int(ui.cycle_duration_min_in.get() * 60),
-                        "ui_cycle_temp_set_f": float(ui.cycle_temp_set_f_in.get()),
+                        "active_faults": ",".join(active_faults) if active_faults else "",
                     })
 
         except queue.Empty:

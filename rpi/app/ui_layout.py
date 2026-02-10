@@ -512,12 +512,12 @@ def build_ui(app: ctk.CTk) -> UI:
     ctk.CTkLabel(tempCard, text="Temperature", font=("SF Pro Text",16,"bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(12,4))
     tempNowF = ctk.StringVar(value="—")
     tempSetF = ctk.StringVar(value="Set: —")
-    ctk.CTkLabel(tempCard, textvariable=tempNowF, font=("SF Pro Display", 28, "bold")).grid(row=1, column=0, sticky="w", padx=12, pady=(4, 0))
+    ctk.CTkLabel(tempCard, textvariable=tempNowF, font=("SF Pro Display", 24, "bold")).grid(row=1, column=0, sticky="w", padx=12, pady=(4, 0))
     ctk.CTkLabel(tempCard, textvariable=tempSetF, font=("SF Pro Text", 14), text_color="gray40").grid(row=2, column=0, sticky="w", padx=12, pady=(2, 12))
 
     flowCard = ctk.CTkFrame(content, corner_radius=16)
     flowCard.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
-    ctk.CTkLabel(flowCard, text="Flow Rate (L/min)", font=("SF Pro Text",16,"bold")).grid(row=0, column=1, sticky="w", padx=12, pady=(12,4))
+    ctk.CTkLabel(flowCard, text="Flow Rate (L/min)", font=("SF Pro Text",16,"bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(12,4))
     flow = ctk.StringVar(value="—")
     ctk.CTkLabel(flowCard, textvariable=flow, font=("SF Pro Text", 20)).grid(row=1, column=0, sticky="w", padx=12, pady=(4, 12))
 
@@ -534,9 +534,9 @@ def build_ui(app: ctk.CTk) -> UI:
     ctk.CTkLabel(levelCard, text="Liquid Level", font=("SF Pro Text",16,"bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(12,4))
     levelText = ctk.StringVar(value="—")
     ctk.CTkLabel(levelCard, textvariable=levelText, font=("SF Pro Text", 20)).grid(row=1, column=0, sticky="w", padx=12, pady=(4,12))
-    ctk.CTkLabel(levelCard, text="Lid Interlock", font=("SF Pro Text",16,"bold")).grid(row=3, column=0, sticky="w", padx=12, pady=(12,4))
+    ctk.CTkLabel(levelCard, text="Lid Interlock", font=("SF Pro Text",16,"bold")).grid(row=0, column=1, sticky="w", padx=12, pady=(12,4))
     lidText = ctk.StringVar(value="—")
-    ctk.CTkLabel(levelCard, textvariable=lidText, font=("SF Pro Text", 20)).grid(row=4, column=0, sticky="w", padx=12, pady=(4,12))
+    ctk.CTkLabel(levelCard, textvariable=lidText, font=("SF Pro Text", 20)).grid(row=1, column=1, sticky="w", padx=12, pady=(4,12))
 
     heaterCard = ctk.CTkFrame(content, corner_radius=16)
     heaterCard.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=10, pady=10)

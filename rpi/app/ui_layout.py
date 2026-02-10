@@ -230,6 +230,14 @@ def build_ui(app: ctk.CTk) -> UI:
         row=0, column=0, sticky="w", padx=14, pady=(14, 10)
     )
 
+    popup_overlay = ctk.CTkFrame(app, corner_radius=0, fg_color="#FFFFFF")
+    popup_overlay.place_forget()
+
+    def _hide_popup():
+        popup_overlay.place_forget()
+        for child in popup_overlay.winfo_children():
+            child.destroy()
+
     def _open_numeric_popup(
         title: str,
         value_var: ctk.Variable,
@@ -239,10 +247,9 @@ def build_ui(app: ctk.CTk) -> UI:
         max_value: Optional[float] = None,
         formatter: Optional[Callable[[float], str]] = None,
     ):
-        popup = ctk.CTkToplevel(app)
-        popup.attributes("-fullscreen", True)
-        popup.configure(fg_color="#FFFFFF")
-        popup.grab_set()
+        _hide_popup()
+        popup_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        popup_overlay.lift()
 
         def clamp(v: float) -> float:
             if min_value is not None:
@@ -284,24 +291,22 @@ def build_ui(app: ctk.CTk) -> UI:
                 value_var.set(int(round(current_value)))
             else:
                 value_var.set(float(current_value))
-            popup.grab_release()
-            popup.destroy()
+            _hide_popup()
 
         def on_cancel():
-            popup.grab_release()
-            popup.destroy()
+            _hide_popup()
 
-        popup.grid_columnconfigure(0, weight=1)
-        popup.grid_rowconfigure(1, weight=1)
+        popup_overlay.grid_columnconfigure(0, weight=1)
+        popup_overlay.grid_rowconfigure(1, weight=1)
 
         ctk.CTkLabel(
-            popup,
+            popup_overlay,
             text=title,
             font=("SF Pro Display", 30, "bold"),
             text_color="black",
         ).grid(row=0, column=0, sticky="ew", padx=28, pady=(28, 10))
 
-        value_frame = ctk.CTkFrame(popup, corner_radius=20, fg_color="#F6F7F9")
+        value_frame = ctk.CTkFrame(popup_overlay, corner_radius=20, fg_color="#F6F7F9")
         value_frame.grid(row=1, column=0, sticky="nsew", padx=28, pady=10)
         value_frame.grid_columnconfigure((0, 2), weight=1)
         value_frame.grid_rowconfigure(0, weight=1)
@@ -320,7 +325,7 @@ def build_ui(app: ctk.CTk) -> UI:
             value_frame, text="+", font=("SF Pro Display", 64, "bold"), command=on_inc, **btn_style
         ).grid(row=0, column=2, padx=24, pady=24, sticky="nsew")
 
-        action_frame = ctk.CTkFrame(popup, corner_radius=0, fg_color="white")
+        action_frame = ctk.CTkFrame(popup_overlay, corner_radius=0, fg_color="white")
         action_frame.grid(row=2, column=0, sticky="ew", padx=28, pady=(10, 28))
         action_frame.grid_columnconfigure((0, 1), weight=1)
 

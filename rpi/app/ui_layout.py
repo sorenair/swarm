@@ -221,7 +221,7 @@ def build_ui(app: ctk.CTk) -> UI:
         row=1, column=0, sticky="w", padx=16, pady=(0, 14)
     )
 
-    set_card = ctk.CTkFrame(page_operation, corner_radius=16)
+    set_card = ctk.CTkFrame(page_operation, corner_radius=16, fg_color="#F6F7F9")
     time_card = ctk.CTkFrame(page_operation, corner_radius=16)
 
     # Setpoints (touch-friendly)
@@ -351,11 +351,180 @@ def build_ui(app: ctk.CTk) -> UI:
 
         update_display()
 
+    def _open_duration_popup(
+        title: str,
+        value_var: ctk.IntVar,
+        min_minutes: int = 30,
+        max_minutes: int = 480,
+    ):
+        _hide_popup()
+        popup_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        popup_overlay.lift()
+
+        def clamp_minutes(v: int) -> int:
+            return max(min_minutes, min(max_minutes, v))
+
+        try:
+            total_minutes = int(round(float(value_var.get())))
+        except Exception:
+            total_minutes = min_minutes
+        total_minutes = clamp_minutes(total_minutes)
+
+        selected_unit = ctk.StringVar(value="minutes")
+        hours_text = ctk.StringVar()
+        minutes_text = ctk.StringVar()
+
+        def split_minutes(v: int) -> tuple[int, int]:
+            h = max(0, v) // 60
+            m = max(0, v) % 60
+            return h, m
+
+        def update_display():
+            h, m = split_minutes(total_minutes)
+            hours_text.set(f"{h:02d}")
+            minutes_text.set(f"{m:02d}")
+
+            if selected_unit.get() == "hours":
+                hours_btn.configure(border_color="#1F6FEB")
+                minutes_btn.configure(border_color="#C7CCD6")
+            else:
+                hours_btn.configure(border_color="#C7CCD6")
+                minutes_btn.configure(border_color="#1F6FEB")
+
+        def set_unit(unit: str):
+            selected_unit.set(unit)
+            update_display()
+
+        def adjust(delta_minutes: int):
+            nonlocal total_minutes
+            total_minutes = clamp_minutes(total_minutes + delta_minutes)
+            update_display()
+
+        def on_inc():
+            if selected_unit.get() == "hours":
+                adjust(60)
+            else:
+                adjust(10)
+
+        def on_dec():
+            if selected_unit.get() == "hours":
+                adjust(-60)
+            else:
+                adjust(-10)
+
+        def on_set():
+            value_var.set(int(total_minutes))
+            _hide_popup()
+
+        def on_cancel():
+            _hide_popup()
+
+        popup_overlay.grid_columnconfigure(0, weight=1)
+        popup_overlay.grid_rowconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            popup_overlay,
+            text=title,
+            font=("SF Pro Display", 30, "bold"),
+            text_color="black",
+        ).grid(row=0, column=0, sticky="ew", padx=28, pady=(28, 10))
+
+        value_frame = ctk.CTkFrame(popup_overlay, corner_radius=20, fg_color="#F6F7F9")
+        value_frame.grid(row=1, column=0, sticky="nsew", padx=28, pady=10)
+        value_frame.grid_columnconfigure(0, weight=1)
+        value_frame.grid_columnconfigure(1, weight=0)
+        value_frame.grid_rowconfigure(0, weight=1)
+
+        display_frame = ctk.CTkFrame(
+            value_frame,
+            corner_radius=18,
+            fg_color="transparent",
+            border_width=0,
+        )
+        display_frame.grid(row=0, column=0, padx=24, pady=24, sticky="nsew")
+        display_frame.grid_columnconfigure((0, 2), weight=1)
+        display_frame.grid_rowconfigure(0, weight=1)
+
+        hours_btn = ctk.CTkButton(
+            display_frame,
+            textvariable=hours_text,
+            font=("SF Pro Display", 54, "bold"),
+            corner_radius=16,
+            fg_color="white",
+            text_color="black",
+            border_width=4,
+            border_color="#C7CCD6",
+            command=lambda: set_unit("hours"),
+        )
+        hours_btn.grid(row=0, column=0, padx=(12, 8), pady=12, sticky="nsew")
+
+        ctk.CTkLabel(
+            display_frame,
+            text=":",
+            font=("SF Pro Display", 48, "bold"),
+            text_color="black",
+        ).grid(row=0, column=1, pady=12, sticky="ns")
+
+        minutes_btn = ctk.CTkButton(
+            display_frame,
+            textvariable=minutes_text,
+            font=("SF Pro Display", 54, "bold"),
+            corner_radius=16,
+            fg_color="white",
+            text_color="black",
+            border_width=4,
+            border_color="#C7CCD6",
+            command=lambda: set_unit("minutes"),
+        )
+        minutes_btn.grid(row=0, column=2, padx=(8, 12), pady=12, sticky="nsew")
+
+        controls_frame = ctk.CTkFrame(value_frame, corner_radius=18, fg_color="transparent")
+        controls_frame.grid(row=0, column=1, padx=(0, 24), pady=24, sticky="ns")
+        controls_frame.grid_rowconfigure((0, 1), weight=1)
+
+        btn_style = dict(height=120, width=160, corner_radius=18, fg_color="#FFFFFF", text_color="black")
+
+        ctk.CTkButton(
+            controls_frame, text="+", font=("SF Pro Display", 64, "bold"), command=on_inc, **btn_style
+        ).grid(row=0, column=0, pady=(0, 16), sticky="nsew")
+
+        ctk.CTkButton(
+            controls_frame, text="−", font=("SF Pro Display", 64, "bold"), command=on_dec, **btn_style
+        ).grid(row=1, column=0, pady=(16, 0), sticky="nsew")
+
+        action_frame = ctk.CTkFrame(popup_overlay, corner_radius=0, fg_color="white")
+        action_frame.grid(row=2, column=0, sticky="ew", padx=28, pady=(10, 28))
+        action_frame.grid_columnconfigure((0, 1), weight=1)
+
+        ctk.CTkButton(
+            action_frame,
+            text="Cancel",
+            font=("SF Pro Text", 24, "bold"),
+            height=70,
+            corner_radius=18,
+            fg_color="#EDEFF3",
+            text_color="black",
+            command=on_cancel,
+        ).grid(row=0, column=0, padx=(0, 12), sticky="ew")
+
+        ctk.CTkButton(
+            action_frame,
+            text="Set",
+            font=("SF Pro Text", 24, "bold"),
+            height=70,
+            corner_radius=18,
+            command=on_set,
+        ).grid(row=0, column=1, padx=(12, 0), sticky="ew")
+
+        update_display()
+
     subcards = ctk.CTkFrame(set_card, corner_radius=0, fg_color="transparent")
     subcards.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 14))
     subcards.grid_columnconfigure((0, 1), weight=1)
 
-    duration_card = ctk.CTkFrame(subcards, corner_radius=16, fg_color="#F6F7F9")
+    duration_card = ctk.CTkFrame(
+        subcards, corner_radius=16, fg_color="white", border_width=2, border_color="#C7CCD6"
+    )
     duration_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
     duration_card.grid_columnconfigure(0, weight=1)
 
@@ -363,7 +532,7 @@ def build_ui(app: ctk.CTk) -> UI:
         row=0, column=0, sticky="w", padx=14, pady=(12, 4)
     )
 
-    duration_text = ctk.StringVar(value=f"{cycle_duration_min_in.get():g} min")
+    duration_text = ctk.StringVar(value="00:00")
     ctk.CTkLabel(duration_card, textvariable=duration_text, font=("SF Pro Display", 30, "bold"), text_color="black").grid(
         row=1, column=0, sticky="w", padx=14, pady=(0, 10)
     )
@@ -374,25 +543,25 @@ def build_ui(app: ctk.CTk) -> UI:
         font=("SF Pro Text", 18, "bold"),
         height=48,
         corner_radius=12,
-        command=lambda: _open_numeric_popup(
+        command=lambda: _open_duration_popup(
             title="Set Cycle Duration",
             value_var=cycle_duration_min_in,
-            unit="min",
-            step=1.0,
-            min_value=0.0,
-            formatter=lambda v: f"{int(round(v))} min",
+            min_minutes=10,
+            max_minutes=720,
         ),
     ).grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 12))
 
-    temp_card = ctk.CTkFrame(subcards, corner_radius=16, fg_color="#F6F7F9")
+    temp_card = ctk.CTkFrame(
+        subcards, corner_radius=16, fg_color="white", border_width=2, border_color="#C7CCD6"
+    )
     temp_card.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
     temp_card.grid_columnconfigure(0, weight=1)
 
-    ctk.CTkLabel(temp_card, text="Set Temp", font=("SF Pro Text", 14, "bold"), text_color="black").grid(
+    ctk.CTkLabel(temp_card, text="Set Temperature", font=("SF Pro Text", 14, "bold"), text_color="black").grid(
         row=0, column=0, sticky="w", padx=14, pady=(12, 4)
     )
 
-    temp_text = ctk.StringVar(value=f"{cycle_temp_set_f_in.get():.1f} °F")
+    temp_text = ctk.StringVar(value=f"{cycle_temp_set_f_in.get():.0f} °F")
     ctk.CTkLabel(temp_card, textvariable=temp_text, font=("SF Pro Display", 30, "bold"), text_color="black").grid(
         row=1, column=0, sticky="w", padx=14, pady=(0, 10)
     )
@@ -409,13 +578,16 @@ def build_ui(app: ctk.CTk) -> UI:
             unit="°F",
             step=1.0,
             min_value=0.0,
-            formatter=lambda v: f"{v:.1f} °F",
+            formatter=lambda v: f"{v:.0f} °F",
         ),
     ).grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 12))
 
     def _on_duration_changed(*_):
         try:
-            duration_text.set(f"{float(cycle_duration_min_in.get()):g} min")
+            total_minutes = int(round(float(cycle_duration_min_in.get())))
+            h = max(0, total_minutes) // 60
+            m = max(0, total_minutes) % 60
+            duration_text.set(f"{h:02d}:{m:02d}")
         except Exception:
             duration_text.set("—")
 
@@ -452,7 +624,7 @@ def build_ui(app: ctk.CTk) -> UI:
     _on_remaining_changed()
 
     # Actions row
-    action = ctk.CTkFrame(page_operation, corner_radius=16, fg_color="#F6F7F9")
+    action = ctk.CTkFrame(page_operation, corner_radius=16, fg_color="transparent")
     action.grid(row=2, column=0, sticky="nsew")
     action.grid_rowconfigure(0, weight=1)
     action.grid_columnconfigure((0,1,2), weight=1)
@@ -486,13 +658,14 @@ def build_ui(app: ctk.CTk) -> UI:
                 action.grid_columnconfigure(0, weight=1)
                 action.grid_columnconfigure(1, weight=0)
                 action.grid_columnconfigure(2, weight=0)
-                btn_start.grid(row=0, column=0, columnspan=3, padx=12, pady=12, sticky="nsew")
+                #btn_start.grid(row=0, column=0, columnspan=3, padx=12, pady=12, sticky="nsew")
+                btn_start.grid(row=0, column=0, columnspan=3, padx=0, pady=0, sticky="nsew")
             else:
                 action.grid_columnconfigure(0, weight=0)
                 action.grid_columnconfigure(1, weight=1)
                 action.grid_columnconfigure(2, weight=1)
-                btn_pause.grid(row=0, column=1, padx=12, pady=12, sticky="nsew")
-                btn_stop.grid(row=0, column=2, padx=12, pady=12, sticky="nsew")
+                btn_pause.grid(row=0, column=1, padx=12, pady=0, sticky="nsew")
+                btn_stop.grid(row=0, column=2, padx=12, pady=0, sticky="nsew")
 
         last_mode = mode
 
@@ -507,7 +680,7 @@ def build_ui(app: ctk.CTk) -> UI:
     content.grid_columnconfigure((0,1), weight=1)
     content.grid_rowconfigure((0,1), weight=1)
 
-    tempCard = ctk.CTkFrame(content, corner_radius=16)
+    tempCard = ctk.CTkFrame(content, corner_radius=16, fg_color="#F6F7F9")
     tempCard.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
     ctk.CTkLabel(tempCard, text="Temperature", font=("SF Pro Text",16,"bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(12,4))
     tempNowF = ctk.StringVar(value="—")
@@ -515,13 +688,13 @@ def build_ui(app: ctk.CTk) -> UI:
     ctk.CTkLabel(tempCard, textvariable=tempNowF, font=("SF Pro Display", 24, "bold")).grid(row=1, column=0, sticky="w", padx=12, pady=(4, 0))
     ctk.CTkLabel(tempCard, textvariable=tempSetF, font=("SF Pro Text", 14), text_color="gray40").grid(row=2, column=0, sticky="w", padx=12, pady=(2, 12))
 
-    flowCard = ctk.CTkFrame(content, corner_radius=16)
+    flowCard = ctk.CTkFrame(content, corner_radius=16, fg_color="#F6F7F9")
     flowCard.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
     ctk.CTkLabel(flowCard, text="Flow Rate (L/min)", font=("SF Pro Text",16,"bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(12,4))
     flow = ctk.StringVar(value="—")
     ctk.CTkLabel(flowCard, textvariable=flow, font=("SF Pro Text", 20)).grid(row=1, column=0, sticky="w", padx=12, pady=(4, 12))
 
-    turbCard = ctk.CTkFrame(content, corner_radius=16)
+    turbCard = ctk.CTkFrame(content, corner_radius=16, fg_color="#F6F7F9")
     turbCard.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
     ctk.CTkLabel(turbCard, text="Turbidity", font=("SF Pro Text",16,"bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(12,4))
     turbPct = ctk.StringVar(value="—")
@@ -529,7 +702,7 @@ def build_ui(app: ctk.CTk) -> UI:
     ctk.CTkLabel(turbCard, textvariable=turbPct, font=("SF Pro Text", 24)).grid(row=1, column=0, sticky="w", padx=12, pady=4)
     ctk.CTkLabel(turbCard, textvariable=ntu, font=("SF Pro Text", 14), text_color="gray40").grid(row=2, column=0, sticky="w", padx=12, pady=(0, 12))
 
-    levelCard = ctk.CTkFrame(content, corner_radius=16)
+    levelCard = ctk.CTkFrame(content, corner_radius=16, fg_color="#F6F7F9")
     levelCard.grid(row=1, column=1, sticky="nsew", padx=10, pady=10)
     ctk.CTkLabel(levelCard, text="Liquid Level", font=("SF Pro Text",16,"bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(12,4))
     levelText = ctk.StringVar(value="—")

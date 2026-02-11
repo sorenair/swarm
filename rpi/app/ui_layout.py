@@ -608,10 +608,12 @@ def build_ui(app: ctk.CTk) -> UI:
         row=0, column=0, sticky="w", padx=14, pady=(14, 10)
     )
 
-    def fmt_mmss(s: int):
-        m = max(0, int(s)) // 60
-        sec = max(0, int(s)) % 60
-        return f"{m:02d}:{sec:02d}"
+    def fmt_hhmmss(s: int):
+        total = max(0, int(s))
+        h = total // 3600
+        m = (total % 3600) // 60
+        sec = total % 60
+        return f"{h:02d}:{m:02d}:{sec:02d}"
 
     remaining_text = ctk.StringVar(value="00:00")
     ctk.CTkLabel(time_card, textvariable=remaining_text, font=("SF Pro Display", 34, "bold")).grid(
@@ -619,7 +621,7 @@ def build_ui(app: ctk.CTk) -> UI:
     )
 
     def _on_remaining_changed(*_):
-        remaining_text.set(fmt_mmss(cycle_remaining_s.get()))
+        remaining_text.set(fmt_hhmmss(cycle_remaining_s.get()))
     cycle_remaining_s.trace_add("write", _on_remaining_changed)
     _on_remaining_changed()
 
@@ -631,7 +633,7 @@ def build_ui(app: ctk.CTk) -> UI:
 
     # Commands will be bound in main.py after build_ui returns
     btn_start = ctk.CTkButton(action, text="START", font=("SF Pro Text", 48), corner_radius=12, command=lambda: None)
-    btn_pause = ctk.CTkButton(action, text="PAUSE / RESUME", font=("SF Pro Text", 48), corner_radius=12, command=lambda: None)
+    btn_pause = ctk.CTkButton(action, text="PAUSE", font=("SF Pro Text", 48), corner_radius=12, command=lambda: None)
     btn_stop  = ctk.CTkButton(action, text="STOP", font=("SF Pro Text", 48), corner_radius=12, command=lambda: None)
 
     def is_cycle_active() -> bool:
@@ -641,6 +643,10 @@ def build_ui(app: ctk.CTk) -> UI:
         nonlocal last_mode
 
         mode = "idle" if cycle_state.get() in ("IDLE", "COMPLETE") else "active"
+        if cycle_state.get() == "PAUSED":
+            btn_pause.configure(text="RESUME")
+        elif cycle_state.get() == "WASHING":
+            btn_pause.configure(text="PAUSE")
 
         if mode != last_mode:
             if is_cycle_active():

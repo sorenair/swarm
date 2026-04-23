@@ -3,10 +3,18 @@ import queue, time, os
 from datetime import datetime
 import customtkinter as ctk
 
-from app.config import PORT, BAUD, ENABLE_FAULT_SCREEN, RX_TIMEOUT_S, LOG_DIR, OVERTEMP_F, TURBIDITY_FAULT_PCT, FLOW_FAULT_LPM, FAULTS_ENABLED
+from app.config import (
+    PORT,
+    BAUD,
+    ENABLE_FAULT_SCREEN,
+    RX_TIMEOUT_S,
+    LOG_MAX_BYTES,
+    LOG_PRUNE_TARGET_BYTES,
+    resolve_log_dir,
+)
 from app.comms import SerialClient
 from app.state import AppModel
-from app.protocol import parse_line, get, apply_message
+from app.protocol import parse_line, apply_message
 from app.log_async import AsyncLogger, log_telemetry, log_cycle_snapshot, now_iso
 from app.controller import Controller
 from app.ui_layout import build_ui
@@ -14,6 +22,7 @@ from app.ui_layout import build_ui
 # -------
 # Logging
 # -------
+LOG_DIR = resolve_log_dir()
 os.makedirs(LOG_DIR, exist_ok=True)
 
 def log_base_name():
@@ -35,7 +44,44 @@ EVENT_HEADERS = [
     "active_faults",
 ]
 
-logger = AsyncLogger(XLSX_PATH, CSV_PATH, EVENT_HEADERS)
+logger = AsyncLogger(
+    XLSX_PATH,
+    CSV_PATH,
+    EVENT_HEADERS,
+    max_dir_bytes=LOG_MAX_BYTES,
+    prune_target_bytes=LOG_PRUNE_TARGET_BYTES,
+)
+
+FAULT_DISPLAY = {
+    "HEATER_SHUTDOWN": {
+        "title": "Heater shutdown",
+        "detail": "Temperature remained above the controller limit long enough to force shutdown.",
+    },
+    "FLOW_LOW": {
+        "title": "Low flow",
+        "detail": "Flow stayed below the controller threshold.",
+    },
+    "OVERTEMP": {
+        "title": "Overtemperature",
+        "detail": "Temperature exceeded the controller threshold.",
+    },
+    "LOW_LEVEL": {
+        "title": "Low liquid level",
+        "detail": "Refill required before continuing.",
+    },
+    "LID_OPEN": {
+        "title": "Lid is open",
+        "detail": "Close lid to continue operation.",
+    },
+    "HIGH_TURBIDITY": {
+        "title": "High turbidity",
+        "detail": "Turbidity exceeded the controller threshold.",
+    },
+    "TEMP_SENSOR": {
+        "title": "Temperature sensor fault",
+        "detail": "Controller is not receiving a valid temperature reading.",
+    },
+}
 
 # --------
 # Main App
@@ -105,7 +151,7 @@ def main():
     # Connect UI to Controller
     # ------------------------
     def start_cycle():
-        if ui.cycle_state.get() in ("WASHING", "PAUSED"):
+        if ui.cycle_state.get() in ("PREHEATING", "WASHING", "PAUSED"):
             return
         log_cycle_snapshot(logger, ui)
         duration_s = int(float(ui.cycle_duration_min_in.get()) * 60)
@@ -140,6 +186,18 @@ def main():
     # Store Machine State in Model and Update UI
     # ------------------------------------------
     model = AppModel()
+
+    def controller_faults_for_display(t):
+        """Return ESP32-declared faults formatted for the UI."""
+        faults = []
+        for code in t.activeFaults or []:
+            meta = FAULT_DISPLAY.get(code, {})
+            faults.append({
+                "code": code,
+                "title": meta.get("title", code.replace("_", " ").title()),
+                "detail": meta.get("detail", "Controller reported an active fault."),
+            })
+        return faults
 
     def render_from_model(model: AppModel):
         t = model.telemetry
@@ -190,85 +248,71 @@ def main():
             f"Output: {'ON' if t.heaterOn else 'OFF'}" if isinstance(t.heaterOn, bool) else "Output: —"
         )
 
-        timeLeft = 21 - t.secOver if isinstance(t.secOver, (int, float)) else None
+        # Overtemp shutoff
+        over_temp_limit_s = int(t.overTempLimitS) if isinstance(t.overTempLimitS, (int, float)) else None
+        over_temp_threshold_f = float(t.overTempThresholdF) if isinstance(t.overTempThresholdF, (int, float)) else None
+        timeLeft = None
+        if over_temp_limit_s is not None and isinstance(t.secOver, (int, float)):
+            timeLeft = max(0, over_temp_limit_s - int(t.secOver))
 
         if t.heaterStop:
-            ui.heaterWarnText.set("SHUTDOWN: Operating temp too high. Resume cycle once temp is below 120°F.")
+            if over_temp_threshold_f is not None:
+                ui.heaterWarnText.set(
+                    f"SHUTDOWN: Operating temp too high. Resume cycle once temp is below {over_temp_threshold_f:.1f}°F."
+                )
+            else:
+                ui.heaterWarnText.set("SHUTDOWN: Operating temp too high.")
         elif t.overTemp:
+            threshold_text = f"{over_temp_threshold_f:.1f}°F" if over_temp_threshold_f is not None else "threshold"
             ui.heaterWarnText.set(
-                f"WARNING: Temp exceeded 120°F. System will shut down in {timeLeft} sec if system does not cool"
+                f"WARNING: Temp exceeded {threshold_text}. System will shut down in {timeLeft} sec if system does not cool."
                 if timeLeft is not None else
-                "WARNING: ≥120°F"
+                f"WARNING: Temperature exceeded {threshold_text}."
             )
         else:
             ui.heaterWarnText.set("")
+            
+        #Flow fault shutoff
+        flow_warn = ""
+        if isinstance(t.flowFault, bool) and t.flowFault:
+            flow_warn = "FLOW FAULT: Flow rate critically low. Please service immediately"
+        
+        elif isinstance(t.flowLow, bool) and t.flowLow:
+            flow_limit_s = int(t.flowLowLimitS) if isinstance(t.flowLowLimitS, (int, float)) else None
+            flow_time_left = None
+            if flow_limit_s is not None:
+                flow_time_left = max(0, flow_limit_s - int(t.secLowFlow or 0))
+            if flow_time_left is not None:
+                flow_warn = (
+                    f"WARNING: Low flow detected. System will shut off in {flow_time_left} second(s) if flow rate does not improve."
+                )
+            else:
+                flow_warn = "WARNING: Low flow detected."
+            
+        #Combine heater and flow warnings if simultaneous
+        heater_warn = ui.heaterWarnText.get()
+        if heater_warn and flow_warn:
+            ui.heaterWarnText.set(heater_warn + " | " + flow_warn)
+            
+        elif flow_warn:
+            ui.heaterWarnText.set(flow_warn)
 
         ui.refresh_operation_panel()
 
     active_faults = []
-
-    def detect_faults(t):
-        """Return a dict of active faults keyed by fault id."""
-        faults = {}
-        # lid logic (keep your existing behavior)
-        if get(FAULTS_ENABLED, "lid"):
-            if isinstance(t.lidClosed, bool):
-                if not t.lidClosed:
-                    # Disable heater if lid is open
-                    if ui.heaterEnableVar.get():
-                        ui.heaterEnableVar.set(False)
-                    if t.cycleState == "WASHING":
-                        faults["lid_open"] = {
-                            "title": "Lid is open",
-                            "detail": "Close lid to resume operation.",
-                        }
-
-        # level
-        if get(FAULTS_ENABLED, "level"):
-            if isinstance(t.levelOk, bool):
-                if not t.levelOk:
-                    faults["level_low"] = {
-                        "title": "Low liquid level",
-                        "detail": "Refill required before continuing.",
-                    }
-
-        # temperature
-        if get(FAULTS_ENABLED, "temp"):
-            if isinstance(t.F, (int, float)):
-                if t.F >= OVERTEMP_F:
-                    faults["temp_high"] = {
-                        "title": "Overtemperature",
-                        "detail": "Temperature exceeded threshold.",
-                    }
-
-        # turbidity
-        if get(FAULTS_ENABLED, "turbidity"):
-            if isinstance(t.turbidity_pct, (int, float)):
-                if t.turbidity_pct >= TURBIDITY_FAULT_PCT:
-                    faults["turbidity_high"] = {
-                        "title": "High turbidity",
-                        "detail": "Turbidity exceeded threshold.",
-                    }
-
-        # flow
-        if get(FAULTS_ENABLED, "flow"):
-            if isinstance(t.flowLpm, (int, float)):
-                if t.flowLpm <= FLOW_FAULT_LPM:
-                    faults["flow_low"] = {
-                        "title": "Low flow",
-                        "detail": "Flow below threshold.",
-                    }
-
-        return faults
 
     last_faults_snapshot = None
 
     def handle_faults(t, ui):
         """Apply fault handling based on the latest telemetry."""
         nonlocal last_faults_snapshot, active_faults
-        faults = detect_faults(t)
-        active_faults = list(faults.keys())
-        snapshot = tuple(sorted((k, v.get("title", ""), v.get("detail", "")) for k, v in faults.items()))
+        faults = controller_faults_for_display(t)
+        active_faults = [fault.get("code", "") for fault in faults]
+
+        if "LID_OPEN" in active_faults and ui.heaterEnableVar.get():
+            ui.heaterEnableVar.set(False)
+
+        snapshot = tuple(sorted((f.get("code", ""), f.get("title", ""), f.get("detail", "")) for f in faults))
 
         if snapshot == last_faults_snapshot:
             return
@@ -279,7 +323,7 @@ def main():
             ui.hide_fault_overlay()
             return
 
-        ui.show_fault_overlay(list(faults.values()))
+        ui.show_fault_overlay(faults)
 
     # ------------------------------
     # Poll Serial Queue and Log Data

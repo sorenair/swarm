@@ -59,5 +59,5 @@ class SerialClient:
             except Exception as e:
                 self.connected = False
                 self.last_disconnect_reason = str(e)
-                self.q.put(("status", f"Disconnected: {e}"))
+                self.q.put(("status", f"Disconnected on port {self.port}: {e}"))
                 time.sleep(1.0)

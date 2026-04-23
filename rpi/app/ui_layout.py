@@ -637,15 +637,15 @@ def build_ui(app: ctk.CTk) -> UI:
     btn_stop  = ctk.CTkButton(action, text="STOP", font=("SF Pro Text", 48), corner_radius=12, command=lambda: None)
 
     def is_cycle_active() -> bool:
-        return cycle_state.get() in ("WASHING", "PAUSED")
+        return cycle_state.get() in ("PREHEATING", "WASHING", "PAUSED")
 
     def refresh_operation_panel():
         nonlocal last_mode
 
-        mode = "idle" if cycle_state.get() in ("IDLE", "COMPLETE") else "active"
+        mode = "idle" if cycle_state.get() in ("IDLE", "COMPLETE", "FAULT") else "active"
         if cycle_state.get() == "PAUSED":
             btn_pause.configure(text="RESUME")
-        elif cycle_state.get() == "WASHING":
+        elif cycle_state.get() in ("PREHEATING", "WASHING"):
             btn_pause.configure(text="PAUSE")
 
         if mode != last_mode:

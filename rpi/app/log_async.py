@@ -11,17 +11,29 @@ from app.state import AppModel
 
 class AsyncLogger:
     """Append structured log rows to CSV and XLSX on a background thread."""
-    def __init__(self, xlsx_path: str, csv_path: str, event_headers: List[str]):
+    def __init__(
+        self,
+        xlsx_path: str,
+        csv_path: str,
+        event_headers: List[str],
+        max_dir_bytes: Optional[int] = None,
+        prune_target_bytes: Optional[int] = None,
+    ):
         """Initialize the logger and start the background worker."""
         self.xlsx_path = xlsx_path
         self.csv_path = csv_path
         self.event_headers = event_headers
+        self.log_dir = os.path.dirname(self.csv_path) or "."
+        self.max_dir_bytes = max_dir_bytes
+        self.prune_target_bytes = prune_target_bytes if prune_target_bytes is not None else max_dir_bytes
 
         self.lq: "queue.Queue[dict]" = queue.Queue()
         self.stop_flag = threading.Event()
+        self._sentinel = object()
 
         self._init_csv()
         self._init_xlsx()
+        self._prune_if_needed()
 
         self.t = threading.Thread(target=self._worker, daemon=True)
         self.t.start()
@@ -99,6 +111,44 @@ class AsyncLogger:
             for r in batch_rows:
                 w.writerow([r.get(k, "") for k in self.event_headers])
 
+    def _prune_if_needed(self):
+        """Delete the oldest inactive log files once the log directory grows too large."""
+        if not self.max_dir_bytes or not os.path.isdir(self.log_dir):
+            return
+
+        keep_paths = {os.path.abspath(self.csv_path), os.path.abspath(self.xlsx_path)}
+        log_files = []
+        total_bytes = 0
+
+        for name in os.listdir(self.log_dir):
+            if not name.endswith((".csv", ".xlsx")):
+                continue
+            path = os.path.join(self.log_dir, name)
+            if not os.path.isfile(path):
+                continue
+            try:
+                size = os.path.getsize(path)
+                mtime = os.path.getmtime(path)
+            except OSError:
+                continue
+            total_bytes += size
+            log_files.append((mtime, size, path))
+
+        if total_bytes <= self.max_dir_bytes:
+            return
+
+        target_bytes = self.prune_target_bytes or self.max_dir_bytes
+        for _, size, path in sorted(log_files):
+            if total_bytes <= target_bytes:
+                break
+            if os.path.abspath(path) in keep_paths:
+                continue
+            try:
+                os.remove(path)
+                total_bytes -= size
+            except OSError:
+                continue
+
     def _worker(self):
         """Batch events and flush to disk on size or time thresholds."""
         batch: List[dict] = []
@@ -106,11 +156,15 @@ class AsyncLogger:
         FLUSH_EVERY_SEC = 2.0
         FLUSH_EVERY_ROWS = 25
 
-        while not self.stop_flag.is_set():
+        while True:
             try:
-                batch.append(self.lq.get(timeout=0.25))
+                item = self.lq.get(timeout=0.25)
+                if item is self._sentinel:
+                    break
+                batch.append(item)
             except queue.Empty:
-                pass
+                if self.stop_flag.is_set():
+                    break
 
             do_flush = False
             if batch and len(batch) >= FLUSH_EVERY_ROWS:
@@ -128,12 +182,26 @@ class AsyncLogger:
                         self._append_csv(batch)
                     except Exception:
                         pass
+                self._prune_if_needed()
                 batch.clear()
                 last_flush = time.time()
+
+        if batch:
+            try:
+                self._append_csv(batch)
+                self._append_xlsx(batch)
+            except Exception:
+                try:
+                    self._append_csv(batch)
+                except Exception:
+                    pass
+            self._prune_if_needed()
 
     def stop(self):
         """Signal the worker thread to stop."""
         self.stop_flag.set()
+        self.lq.put(self._sentinel)
+        self.t.join(timeout=3.0)
 
 def now_iso():
     """Return a millisecond-precision timestamp string."""

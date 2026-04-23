@@ -35,7 +35,12 @@ def apply_message(model: AppModel, m: Dict[str, Any]) -> None:
 
     t.C = m.get("C", "")
     t.F = float(m.get("F", 0) or 0)
+
     t.flowLpm = float(m.get("flowLpm", 0) or 0)
+    t.flowLow = m.get("flowLow")
+    t.secLowFlow = m.get("secLowFlow")
+    t.flowFault = m.get("flowFault")
+
     t.turbidity_pct = float(m.get("% Turbidity", 0) or 0)
     t.NTU = float(m.get("NTU", 0) or 0)
 
@@ -46,9 +51,20 @@ def apply_message(model: AppModel, m: Dict[str, Any]) -> None:
     t.overTemp = m.get("overTemp", None)
     t.secOver = m.get("secOver", None)
     t.heaterStop = m.get("heaterStop", None)
+    t.overTempThresholdF = m.get("overTempThresholdF", None)
+    t.overTempLimitS = m.get("overTempLimitS", None)
+    t.heatLowerSetpointF = m.get("heatLowerSetpointF", None)
+    t.heatUpperSetpointF = m.get("heatUpperSetpointF", None)
     t.levelOk = m.get("levelOk", None)
     t.lidClosed = m.get("lidClosed", None)
 
     t.cycleState = m.get("cycleState", None)
     t.cycleRemainingS = m.get("cycleRemainingS", None)
     t.cycleTempSetF = m.get("cycleTempSetF", None)
+    t.flowLowThresholdLpm = m.get("flowLowThresholdLpm", None)
+    t.flowLowLimitS = m.get("flowLowLimitS", None)
+    t.turbidityFaultPct = m.get("turbidityFaultPct", None)
+    t.faultActive = m.get("faultActive", None)
+    t.faultFlags = m.get("faultFlags", None)
+    t.faultCode = m.get("faultCode", None)
+    t.activeFaults = list(m.get("activeFaults", []) or [])

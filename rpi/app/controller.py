@@ -32,4 +32,4 @@ class Controller:
 
     def set_heater_enable(self, enabled: bool):
         """Enable or disable the heater."""
-        self._send(f"HEATER ENABLE {1 if enabled else 0}")
+        self._send(f"HEATER {1 if enabled else 0}")

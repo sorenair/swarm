@@ -21,8 +21,26 @@ class Telemetry:
     overTemp: Optional[bool] = None
     secOver: Optional[float] = None
     heaterStop: Optional[bool] = None
+    overTempThresholdF: Optional[float] = None
+    overTempLimitS: Optional[int] = None
+    heatLowerSetpointF: Optional[float] = None
+    heatUpperSetpointF: Optional[float] = None
     levelOk: Optional[bool] = None
     lidClosed: Optional[bool] = None
+
+    # flow sensor / saftey
+    flowLow: Optional[bool] = None
+    secLowFlow: Optional[int] = None
+    flowFault: Optional[bool] = None
+    flowLowThresholdLpm: Optional[float] = None
+    flowLowLimitS: Optional[int] = None
+
+    # controller-defined fault status
+    faultActive: Optional[bool] = None
+    faultFlags: Optional[int] = None
+    faultCode: Optional[str] = None
+    activeFaults: list[str] = field(default_factory=list)
+    turbidityFaultPct: Optional[float] = None
 
     # cycle
     cycleState: Optional[str] = None

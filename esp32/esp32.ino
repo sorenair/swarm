@@ -3,13 +3,27 @@
 // --- Cycle state machine types must be declared before Arduino auto-prototypes ---
 enum CycleState : uint8_t {
   CYCLE_IDLE = 0,
-  CYCLE_WASHING = 1,
-  CYCLE_PAUSED = 2,
-  CYCLE_COMPLETE = 3,
-  CYCLE_FAULT = 4
+  CYCLE_PREHEATING = 1,
+  CYCLE_WASHING = 2,
+  CYCLE_PAUSED = 3,
+  CYCLE_COMPLETE = 4,
+  CYCLE_FAULT = 5
 };
 
 static const char* cycleStateToStr(CycleState s);
+uint16_t computeFaultFlags(bool okTemp, float tempF, bool levelOk, bool lidClosed, bool okTur, float turbPctScaled);
+const char* primaryFaultCodeFromFlags(uint16_t flags);
+void printFaultCodeArray(uint16_t flags);
+
+enum FaultFlags : uint16_t {
+  FAULT_TEMP_SENSOR      = 1 << 0,
+  FAULT_OVERTEMP         = 1 << 1,
+  FAULT_LOW_LEVEL        = 1 << 2,
+  FAULT_LID_OPEN         = 1 << 3,
+  FAULT_FLOW_LOW         = 1 << 4,
+  FAULT_TURBIDITY_HIGH   = 1 << 5,
+  FAULT_HEATER_SHUTDOWN  = 1 << 6
+};
 
 /////////////////////////////////////////////////////////////////////////////////
 // TEMPERATURE SENSOR (PT100 & MAX31865 via SPI)
@@ -32,6 +46,16 @@ Adafruit_MAX31865 sensor(MAX_CS, MAX_MOSI, MAX_MISO, MAX_CLK);
 volatile uint32_t pulseCount = 0;
 unsigned long lastTick = 0;
 
+// Low flow detection
+const float FLOW_LOW_LPM = 2.0f;     // warning threshold
+const uint8_t FLOW_LOW_LIMIT_S = 20; // hard fault after 20 continuous seconds
+const float TURBIDITY_FAULT_PCT = 80.0f;
+
+bool flowLow = false;     // live warning condition
+bool flowFault = false;   // hard latched flow fault
+uint8_t secLowFlow = 0;   // consecutive seconds below threshold
+CycleState cycleState = CYCLE_IDLE;
+
 void IRAM_ATTR pulseISR()
 {
   pulseCount++;
@@ -42,6 +66,39 @@ float pulsesToLpm(uint32_t pulses, float dtSeconds)
   // Adjust this after you do a 1-L bucket test
   const float K = 450.0f; // pulses per liter
   return (pulses / K) / (dtSeconds / 60.0f);
+}
+
+void updateFlowStatus(float flowLpm)
+{
+  // Only monitor low flow during an active wash
+  if (cycleState != CYCLE_WASHING)
+  {
+    flowLow = false;
+    secLowFlow = 0;
+    flowFault = false;
+    return;
+  }
+
+  if (flowLpm < FLOW_LOW_LPM)
+  {
+    flowLow = true;
+
+    if (secLowFlow < 255)
+    {
+      secLowFlow++;
+    }
+
+    if (secLowFlow >= FLOW_LOW_LIMIT_S)
+    {
+      flowFault = true;
+    }
+  }
+  else
+  {
+    flowLow = false;
+    secLowFlow = 0;
+    flowFault = false;
+  }
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -125,12 +182,16 @@ float ntuEstimateFromPct(uint8_t pct)
 /////////////////////////////////////////////////////////////////////////////////
 
 #define HEATER_LED 4
-const float OVER_F = 120.0f;
+const float OVER_F = 102.0f;
+const uint8_t OVER_TEMP_LIMIT_S = 20;
 float setTempF = 95.0f;
 uint8_t secOver = 0;
 bool heaterStop = false;
 bool heaterOn = false;
 bool heaterEn = false;
+bool heaterDemandLatched = false;
+bool currentTempValid = false;
+float currentTempF = NAN;
 //bool heaterLevel = false;
 
 // bang-bang automation
@@ -138,10 +199,23 @@ bool bangBang(float temp_f)
 {
   if (isnan(temp_f))  // failsafe in case of invalid temp value
   {
+    heaterDemandLatched = false;
     return false;
   }
 
-  return (temp_f < setTempF);
+  const float lowerSetpointF = setTempF - 3.0f;
+  const float upperSetpointF = setTempF + 3.0f;
+
+  if (temp_f <= lowerSetpointF)
+  {
+    heaterDemandLatched = true;
+  }
+  else if (temp_f >= upperSetpointF)
+  {
+    heaterDemandLatched = false;
+  }
+
+  return heaterDemandLatched;
 }
 
 void setHeaterLED(float temp_f, bool requestOn)
@@ -168,7 +242,7 @@ void setHeaterLED(float temp_f, bool requestOn)
   }
 
   // If temp too high for 20 sec or more, shut off heater
-  if (secOver >= 20)
+  if (secOver >= OVER_TEMP_LIMIT_S)
   {
     heaterStop = true;
   }
@@ -290,7 +364,6 @@ void handleMotorCommand(const String &line)
 // CYCLE (WASH PROGRAM STATE MACHINE)
 /////////////////////////////////////////////////////////////////////////////////
 
-CycleState cycleState = CYCLE_IDLE;
 int32_t cycleRemainingS = 0;
 
 // Defaults for wash behavior (tune for your machine)
@@ -302,12 +375,136 @@ static const char* cycleStateToStr(CycleState s)
   switch (s)
   {
     case CYCLE_IDLE:     return "IDLE";
+    case CYCLE_PREHEATING: return "PREHEATING";
     case CYCLE_WASHING:  return "WASHING";
     case CYCLE_PAUSED:   return "PAUSED";
     case CYCLE_COMPLETE: return "COMPLETE";
     case CYCLE_FAULT:    return "FAULT";
     default:             return "IDLE";
   }
+}
+
+float cycleLowerSetpointF()
+{
+  return setTempF - 3.0f;
+}
+
+float cycleUpperSetpointF()
+{
+  return setTempF + 3.0f;
+}
+
+bool shouldPreheat(float tempF)
+{
+  if (isnan(tempF))
+  {
+    return true;
+  }
+  return tempF < cycleUpperSetpointF();
+}
+
+uint16_t computeFaultFlags(bool okTemp, float tempF, bool levelOk, bool lidClosed, bool okTur, float turbPctScaled)
+{
+  uint16_t flags = 0;
+
+  if (!okTemp || isnan(tempF))
+  {
+    flags |= FAULT_TEMP_SENSOR;
+  }
+
+  if (okTemp && !isnan(tempF) && tempF >= OVER_F)
+  {
+    flags |= FAULT_OVERTEMP;
+  }
+
+  if (!levelOk)
+  {
+    flags |= FAULT_LOW_LEVEL;
+  }
+
+  if (!lidClosed)
+  {
+    flags |= FAULT_LID_OPEN;
+  }
+
+  if (flowFault)
+  {
+    flags |= FAULT_FLOW_LOW;
+  }
+
+  if (okTur && !isnan(turbPctScaled) && turbPctScaled >= TURBIDITY_FAULT_PCT)
+  {
+    flags |= FAULT_TURBIDITY_HIGH;
+  }
+
+  if (heaterStop)
+  {
+    flags |= FAULT_HEATER_SHUTDOWN;
+  }
+
+  return flags;
+}
+
+const char* primaryFaultCodeFromFlags(uint16_t flags)
+{
+  if (flags & FAULT_HEATER_SHUTDOWN) return "HEATER_SHUTDOWN";
+  if (flags & FAULT_FLOW_LOW) return "FLOW_LOW";
+  if (flags & FAULT_OVERTEMP) return "OVERTEMP";
+  if (flags & FAULT_LOW_LEVEL) return "LOW_LEVEL";
+  if (flags & FAULT_LID_OPEN) return "LID_OPEN";
+  if (flags & FAULT_TURBIDITY_HIGH) return "HIGH_TURBIDITY";
+  if (flags & FAULT_TEMP_SENSOR) return "TEMP_SENSOR";
+  return "NONE";
+}
+
+void printFaultCodeArray(uint16_t flags)
+{
+  bool first = true;
+
+  Serial.print("[");
+
+  if (flags & FAULT_HEATER_SHUTDOWN)
+  {
+    Serial.print("\"HEATER_SHUTDOWN\"");
+    first = false;
+  }
+  if (flags & FAULT_FLOW_LOW)
+  {
+    if (!first) Serial.print(",");
+    Serial.print("\"FLOW_LOW\"");
+    first = false;
+  }
+  if (flags & FAULT_OVERTEMP)
+  {
+    if (!first) Serial.print(",");
+    Serial.print("\"OVERTEMP\"");
+    first = false;
+  }
+  if (flags & FAULT_LOW_LEVEL)
+  {
+    if (!first) Serial.print(",");
+    Serial.print("\"LOW_LEVEL\"");
+    first = false;
+  }
+  if (flags & FAULT_LID_OPEN)
+  {
+    if (!first) Serial.print(",");
+    Serial.print("\"LID_OPEN\"");
+    first = false;
+  }
+  if (flags & FAULT_TURBIDITY_HIGH)
+  {
+    if (!first) Serial.print(",");
+    Serial.print("\"HIGH_TURBIDITY\"");
+    first = false;
+  }
+  if (flags & FAULT_TEMP_SENSOR)
+  {
+    if (!first) Serial.print(",");
+    Serial.print("\"TEMP_SENSOR\"");
+  }
+
+  Serial.print("]");
 }
 
 void cycleStopAllOutputs()
@@ -318,13 +515,18 @@ void cycleStopAllOutputs()
 
 void cycleApplyOutputsForState()
 {
-  if (cycleState == CYCLE_WASHING)
+  if (cycleState == CYCLE_PREHEATING)
+  {
+    heaterEn = true;
+    motorDrive(cycleMotorDuty, cycleMotorFwd);
+  }
+  else if (cycleState == CYCLE_WASHING)
   {
     // Heater remains subject to lidClosed + bang-bang + overtemp shutoff in loop()
     heaterEn = true;
-    //motorDrive(cycleMotorDuty, cycleMotorFwd);
+    motorDrive(cycleMotorDuty, cycleMotorFwd);
   }
-  else if (cycleState == CYCLE_PAUSED)
+  else if (cycleState == CYCLE_PAUSED || cycleState == CYCLE_COMPLETE || cycleState == CYCLE_FAULT)
   {
     heaterEn = false;
     motorStop();
@@ -352,8 +554,20 @@ void handleCycleCommand(const String &line)
     {
       cycleRemainingS = max(0, secs);
       if (n >= 2) setTempF = tF;
+      heaterDemandLatched = false;
 
-      cycleState = (cycleRemainingS > 0) ? CYCLE_WASHING : CYCLE_COMPLETE;
+      if (cycleRemainingS <= 0)
+      {
+        cycleState = CYCLE_COMPLETE;
+      }
+      else if (shouldPreheat(currentTempValid ? currentTempF : NAN))
+      {
+        cycleState = CYCLE_PREHEATING;
+      }
+      else
+      {
+        cycleState = CYCLE_WASHING;
+      }
       cycleApplyOutputsForState();
 
       Serial.print("{\"ack\":\"CYCLE\",\"cmd\":\"START\",\"state\":\"");
@@ -369,7 +583,7 @@ void handleCycleCommand(const String &line)
 
   if (line.equalsIgnoreCase("CYCLE PAUSE"))
   {
-    if (cycleState == CYCLE_WASHING)
+    if (cycleState == CYCLE_WASHING || cycleState == CYCLE_PREHEATING)
     {
       cycleState = CYCLE_PAUSED;
       cycleApplyOutputsForState();
@@ -384,7 +598,18 @@ void handleCycleCommand(const String &line)
   {
     if (cycleState == CYCLE_PAUSED)
     {
-      cycleState = (cycleRemainingS > 0) ? CYCLE_WASHING : CYCLE_COMPLETE;
+      if (cycleRemainingS <= 0)
+      {
+        cycleState = CYCLE_COMPLETE;
+      }
+      else if (shouldPreheat(currentTempValid ? currentTempF : NAN))
+      {
+        cycleState = CYCLE_PREHEATING;
+      }
+      else
+      {
+        cycleState = CYCLE_WASHING;
+      }
       cycleApplyOutputsForState();
     }
     Serial.print("{\"ack\":\"CYCLE\",\"cmd\":\"RESUME\",\"state\":\"");
@@ -397,6 +622,7 @@ void handleCycleCommand(const String &line)
   {
     cycleState = CYCLE_IDLE;
     cycleRemainingS = 0;
+    heaterDemandLatched = false;
     cycleApplyOutputsForState();
 
     Serial.println("{\"ack\":\"CYCLE\",\"cmd\":\"STOP\",\"state\":\"IDLE\"}");
@@ -405,6 +631,58 @@ void handleCycleCommand(const String &line)
 
   // Unknown CYCLE subcommand
   Serial.println("{\"ack\":\"CYCLE\",\"err\":\"UNKNOWN\"}");
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+// FAULT HANDLER
+/////////////////////////////////////////////////////////////////////////////////
+
+bool hasActiveFault(bool okTemp, float tempF, bool levelOk, bool lidClosed, bool okTur, float turbPctScaled)
+{
+  uint16_t flags = computeFaultFlags(okTemp, tempF, levelOk, lidClosed, okTur, turbPctScaled);
+
+  // Always honor latched heater shutdown
+  if (flags & FAULT_HEATER_SHUTDOWN) return true;
+
+  // Only treat process faults as blocking while actively washing
+  if (cycleState == CYCLE_WASHING || cycleState == CYCLE_PREHEATING)
+  {
+    uint16_t blockingMask =
+      FAULT_TEMP_SENSOR |
+      FAULT_OVERTEMP |
+      FAULT_LOW_LEVEL |
+      FAULT_LID_OPEN;
+
+    if (cycleState == CYCLE_WASHING)
+    {
+      blockingMask |= FAULT_FLOW_LOW;
+    }
+
+    return (flags & blockingMask) != 0;
+  }
+
+  return false;
+}
+
+void faultHandler(bool okTemp, float tempF, bool levelOk, bool lidClosed, bool okTur, float turbPctScaled)
+{
+  bool fault = hasActiveFault(okTemp, tempF, levelOk, lidClosed, okTur, turbPctScaled);
+
+  // If a blocking fault occurs during an active process, pause into FAULT state
+  if (fault && (cycleState == CYCLE_WASHING || cycleState == CYCLE_PREHEATING))
+  {
+    cycleState = CYCLE_FAULT;
+    cycleApplyOutputsForState();
+    return;
+  }
+
+  // If fault clears while in FAULT, move to PAUSED
+  if (!fault && cycleState == CYCLE_FAULT)
+  {
+    cycleState = CYCLE_PAUSED;
+    cycleApplyOutputsForState();
+    return;
+  }
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -462,11 +740,14 @@ void loop()
     float dt = (now - lastTick) / 1000.0f;
     lastTick = now;
     float flowLpm = pulsesToLpm(pulses, dt);
+    updateFlowStatus(flowLpm);
 
     // TEMPERATURE
     float tempC = sensor.temperature(RNOMINAL, RREF);
     bool okT = !isnan(tempC);
     float tempF = okT ? (tempC * 9.0f / 5.0f + 32.0f) : NAN;
+    currentTempValid = okT;
+    currentTempF = tempF;
 
     // TURBIDITY
     uint8_t turbPct = 0;
@@ -482,6 +763,14 @@ void loop()
     // LID INTERLOCK
     bool lidClosed = (digitalRead(LID_LOCK) == LOW);
 
+    // CYCLE state progression
+    if (cycleState == CYCLE_PREHEATING && okT && !isnan(tempF) && tempF >= setTempF)
+    {
+      heaterDemandLatched = false;
+      cycleState = CYCLE_WASHING;
+      cycleApplyOutputsForState();
+    }
+
     // CYCLE countdown
     if (cycleState == CYCLE_WASHING)
     {
@@ -493,6 +782,9 @@ void loop()
         cycleApplyOutputsForState();
       }
     }
+
+    //faultHandler call
+    faultHandler(okT, tempF, levelOk, lidClosed, okTur, turbPctScaled);
     
     // HEATER
     bool demandHeat = false;
@@ -507,11 +799,22 @@ void loop()
     }
 
     setHeaterLED(tempF, demandHeat);
+    uint16_t faultFlags = computeFaultFlags(okT, tempF, levelOk, lidClosed, okTur, turbPctScaled);
+    const char* faultCode = primaryFaultCodeFromFlags(faultFlags);
     
     // JSON OUT
     Serial.print("{\"ok\":true");
     
     Serial.print(",\"flowLpm\":"); Serial.print(flowLpm, 2);
+    Serial.print(",\"flowLow\":");
+    Serial.print(flowLow ? "true" : "false");
+
+    Serial.print(",\"secLowFlow\":");
+    Serial.print(secLowFlow);
+
+    Serial.print(",\"flowFault\":");
+    Serial.print(flowFault ? "true" : "false");
+    
     if (okT)
     {
       Serial.print(",\"C\":"); Serial.print(tempC, 2);
@@ -539,6 +842,12 @@ void loop()
     Serial.print(",\"setTempF\":");
     Serial.print(setTempF, 1);
 
+    Serial.print(",\"heatLowerSetpointF\":");
+    Serial.print(cycleLowerSetpointF(), 1);
+
+    Serial.print(",\"heatUpperSetpointF\":");
+    Serial.print(cycleUpperSetpointF(), 1);
+
     Serial.print(",\"heaterDemand\":");
     Serial.print(demandHeat ? "true" : "false");
     
@@ -554,9 +863,37 @@ void loop()
     Serial.print(",\"heaterStop\":");
     Serial.print(heaterStop ? "true" : "false");
 
+    Serial.print(",\"overTempThresholdF\":");
+    Serial.print(OVER_F, 1);
+
+    Serial.print(",\"overTempLimitS\":");
+    Serial.print(OVER_TEMP_LIMIT_S);
+
+    Serial.print(",\"flowLowThresholdLpm\":");
+    Serial.print(FLOW_LOW_LPM, 2);
+
+    Serial.print(",\"flowLowLimitS\":");
+    Serial.print(FLOW_LOW_LIMIT_S);
+
+    Serial.print(",\"turbidityFaultPct\":");
+    Serial.print(TURBIDITY_FAULT_PCT, 1);
+
     // Lid Interlock Status
     Serial.print(",\"lidClosed\":");
     Serial.print(lidClosed ? "true" : "false");
+
+    Serial.print(",\"faultActive\":");
+    Serial.print((faultFlags != 0) ? "true" : "false");
+
+    Serial.print(",\"faultFlags\":");
+    Serial.print(faultFlags);
+
+    Serial.print(",\"faultCode\":\"");
+    Serial.print(faultCode);
+    Serial.print("\"");
+
+    Serial.print(",\"activeFaults\":");
+    printFaultCodeArray(faultFlags);
 
     // Cycle state (RPi UI uses these fields)
     Serial.print(",\"cycleState\":\"");

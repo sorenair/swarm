@@ -21,9 +21,9 @@ def resolve_log_dir() -> str:
         return env_dir
 
     usb_candidates = []
-    usb_candidates.extend(sorted(glob("/media/pi/*")))
-    usb_candidates.extend(sorted(glob("/media/*")))
-    usb_candidates.extend(sorted(glob("/mnt/*")))
+    usb_candidates.extend(sorted(glob("/media/swarm/*")))
+    #usb_candidates.extend(sorted(glob("/media/*")))
+    #usb_candidates.extend(sorted(glob("/mnt/*")))
 
     for mount_dir in usb_candidates:
         if os.path.isdir(mount_dir) and os.access(mount_dir, os.W_OK):
@@ -34,5 +34,3 @@ def resolve_log_dir() -> str:
 # UI defaults
 DEFAULT_CYCLE_MIN = 10.0
 DEFAULT_TEMP_F = 95.0
-
-# Fault thresholds are now sourced from ESP32 telemetry.

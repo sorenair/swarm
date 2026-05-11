@@ -10,8 +10,6 @@ class Telemetry:
     C: str = ""
     F: float = 0.0
     flowLpm: float = 0.0
-    turbidity_pct: float = 0.0
-    NTU: float = 0.0
 
     # heater / safety
     heaterEnable: Optional[bool] = None
@@ -40,7 +38,6 @@ class Telemetry:
     faultFlags: Optional[int] = None
     faultCode: Optional[str] = None
     activeFaults: list[str] = field(default_factory=list)
-    turbidityFaultPct: Optional[float] = None
 
     # cycle
     cycleState: Optional[str] = None

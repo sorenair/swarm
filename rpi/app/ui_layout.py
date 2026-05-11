@@ -30,13 +30,9 @@ class UI:
     tempNowF: ctk.StringVar
     tempSetF: ctk.StringVar
     flow: ctk.StringVar
-    turbPct: ctk.StringVar
-    ntu: ctk.StringVar
     levelText: ctk.StringVar
     lidText: ctk.StringVar
 
-    heaterEnableVar: ctk.BooleanVar
-    heaterStatusText: ctk.StringVar
     heaterOutText: ctk.StringVar
     heaterWarnText: ctk.StringVar
 
@@ -44,7 +40,6 @@ class UI:
     btn_start: ctk.CTkButton
     btn_pause: ctk.CTkButton
     btn_stop: ctk.CTkButton
-    heater_switch: ctk.CTkSwitch
 
     # widgets main may need to manipulate (optional)
     set_card: ctk.CTkFrame
@@ -182,15 +177,16 @@ def build_ui(app: ctk.CTk) -> UI:
     def nav_button(parent, text, command):
         return ctk.CTkButton(
             parent, text=text, command=command,
-            height=64, corner_radius=10,
+            font=("SF Pro Text", 30, "bold"),
+            height=164, corner_radius=10,
             fg_color="#FFFFFF", hover_color="#EDEFF3",
             text_color="black", anchor="w"
         )
 
     ctk.CTkFrame(nav_btns, fg_color="transparent").grid(row=0, column=0, sticky="nsew")
-    nav_button(nav_btns, "Operation", lambda: show_page("operation")).grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 10))
-    nav_button(nav_btns, "Status",    lambda: show_page("status")).grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 10))
-    nav_button(nav_btns, "Faults",    lambda: show_page("faults")).grid(row=3, column=0, sticky="ew", padx=12, pady=(0, 10))
+    nav_button(nav_btns, "Operation", lambda: show_page("operation")).grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 48))
+    nav_button(nav_btns, "Status",    lambda: show_page("status")).grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 48))
+    nav_button(nav_btns, "Faults",    lambda: show_page("faults")).grid(row=3, column=0, sticky="ew", padx=12, pady=(0, 48))
     ctk.CTkFrame(nav_btns, fg_color="transparent").grid(row=4, column=0, sticky="nsew")
 
     # --------------------------
@@ -213,12 +209,20 @@ def build_ui(app: ctk.CTk) -> UI:
     status_card = ctk.CTkFrame(page_operation, corner_radius=16, fg_color="#F6F7F9")
     status_card.grid(row=0, column=0, sticky="nsew", pady=(0, 12))
     status_card.grid_columnconfigure(0, weight=1)
+    status_card.grid_rowconfigure(1, weight=1)
 
-    ctk.CTkLabel(status_card, text="Machine Status", font=("SF Pro Text", 16, "bold"), text_color="black").grid(
+    ctk.CTkLabel(status_card, text="Machine Status", font=("SF Pro Text", 24, "bold"), text_color="black").grid(
         row=0, column=0, sticky="w", padx=16, pady=(14, 6)
     )
-    ctk.CTkLabel(status_card, textvariable=cycle_state, font=("SF Pro Display", 30, "bold"), text_color="black").grid(
-        row=1, column=0, sticky="w", padx=16, pady=(0, 14)
+    ctk.CTkLabel(
+        status_card,
+        textvariable=cycle_state,
+        font=("SF Pro Display", 112, "bold"),
+        text_color="black",
+        anchor="center",
+        justify="center",
+    ).grid(
+        row=1, column=0, sticky="nsew", padx=20, pady=(0, 12)
     )
 
     set_card = ctk.CTkFrame(page_operation, corner_radius=16, fg_color="#F6F7F9")
@@ -226,7 +230,8 @@ def build_ui(app: ctk.CTk) -> UI:
 
     # Setpoints (touch-friendly)
     set_card.grid_columnconfigure(0, weight=1)
-    ctk.CTkLabel(set_card, text="Cycle Configuration", font=("SF Pro Text", 16, "bold")).grid(
+    set_card.grid_rowconfigure(1, weight=1)
+    ctk.CTkLabel(set_card, text="Cycle Configuration", font=("SF Pro Text", 24, "bold")).grid(
         row=0, column=0, sticky="w", padx=14, pady=(14, 10)
     )
 
@@ -318,7 +323,7 @@ def build_ui(app: ctk.CTk) -> UI:
         ).grid(row=0, column=0, padx=24, pady=24, sticky="nsew")
 
         ctk.CTkLabel(
-            value_frame, textvariable=display_value, font=("SF Pro Display", 54, "bold"), text_color="black"
+            value_frame, textvariable=display_value, font=("SF Pro Display", 128, "bold"), text_color="black"
         ).grid(row=0, column=1, padx=20, pady=24)
 
         ctk.CTkButton(
@@ -448,7 +453,7 @@ def build_ui(app: ctk.CTk) -> UI:
         hours_btn = ctk.CTkButton(
             display_frame,
             textvariable=hours_text,
-            font=("SF Pro Display", 54, "bold"),
+            font=("SF Pro Display", 128, "bold"),
             corner_radius=16,
             fg_color="white",
             text_color="black",
@@ -461,14 +466,14 @@ def build_ui(app: ctk.CTk) -> UI:
         ctk.CTkLabel(
             display_frame,
             text=":",
-            font=("SF Pro Display", 48, "bold"),
+            font=("SF Pro Display", 128, "bold"),
             text_color="black",
-        ).grid(row=0, column=1, pady=12, sticky="ns")
+        ).grid(row=0, column=1, padx=36, pady=12, sticky="ns")
 
         minutes_btn = ctk.CTkButton(
             display_frame,
             textvariable=minutes_text,
-            font=("SF Pro Display", 54, "bold"),
+            font=("SF Pro Display", 128, "bold"),
             corner_radius=16,
             fg_color="white",
             text_color="black",
@@ -482,7 +487,7 @@ def build_ui(app: ctk.CTk) -> UI:
         controls_frame.grid(row=0, column=1, padx=(0, 24), pady=24, sticky="ns")
         controls_frame.grid_rowconfigure((0, 1), weight=1)
 
-        btn_style = dict(height=120, width=160, corner_radius=18, fg_color="#FFFFFF", text_color="black")
+        btn_style = dict(height=120, width=300, corner_radius=18, fg_color="#FFFFFF", text_color="black")
 
         ctk.CTkButton(
             controls_frame, text="+", font=("SF Pro Display", 64, "bold"), command=on_inc, **btn_style
@@ -521,27 +526,29 @@ def build_ui(app: ctk.CTk) -> UI:
     subcards = ctk.CTkFrame(set_card, corner_radius=0, fg_color="transparent")
     subcards.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 14))
     subcards.grid_columnconfigure((0, 1), weight=1)
+    subcards.grid_rowconfigure(0, weight=1)
 
     duration_card = ctk.CTkFrame(
         subcards, corner_radius=16, fg_color="white", border_width=2, border_color="#C7CCD6"
     )
     duration_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
     duration_card.grid_columnconfigure(0, weight=1)
+    duration_card.grid_rowconfigure(1, weight=1)
 
-    ctk.CTkLabel(duration_card, text="Duration", font=("SF Pro Text", 14, "bold"), text_color="black").grid(
+    ctk.CTkLabel(duration_card, text="Duration", font=("SF Pro Text", 32, "bold"), text_color="black").grid(
         row=0, column=0, sticky="w", padx=14, pady=(12, 4)
     )
 
     duration_text = ctk.StringVar(value="00:00")
-    ctk.CTkLabel(duration_card, textvariable=duration_text, font=("SF Pro Display", 30, "bold"), text_color="black").grid(
-        row=1, column=0, sticky="w", padx=14, pady=(0, 10)
+    ctk.CTkLabel(duration_card, textvariable=duration_text, font=("SF Pro Display", 92, "bold"), text_color="black").grid(
+        row=1, column=0, sticky="nsew", padx=14, pady=(0, 10)
     )
 
     ctk.CTkButton(
         duration_card,
         text="Change",
         font=("SF Pro Text", 18, "bold"),
-        height=48,
+        height=72,
         corner_radius=12,
         command=lambda: _open_duration_popup(
             title="Set Cycle Duration",
@@ -556,21 +563,22 @@ def build_ui(app: ctk.CTk) -> UI:
     )
     temp_card.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
     temp_card.grid_columnconfigure(0, weight=1)
+    temp_card.grid_rowconfigure(1, weight=1)
 
-    ctk.CTkLabel(temp_card, text="Set Temperature", font=("SF Pro Text", 14, "bold"), text_color="black").grid(
+    ctk.CTkLabel(temp_card, text="Set Temperature", font=("SF Pro Text", 32, "bold"), text_color="black").grid(
         row=0, column=0, sticky="w", padx=14, pady=(12, 4)
     )
 
     temp_text = ctk.StringVar(value=f"{cycle_temp_set_f_in.get():.0f} °F")
-    ctk.CTkLabel(temp_card, textvariable=temp_text, font=("SF Pro Display", 30, "bold"), text_color="black").grid(
-        row=1, column=0, sticky="w", padx=14, pady=(0, 10)
+    ctk.CTkLabel(temp_card, textvariable=temp_text, font=("SF Pro Display", 92, "bold"), text_color="black").grid(
+        row=1, column=0, sticky="nsew", padx=14, pady=(0, 10)
     )
 
     ctk.CTkButton(
         temp_card,
         text="Change",
         font=("SF Pro Text", 18, "bold"),
-        height=48,
+        height=72,
         corner_radius=12,
         command=lambda: _open_numeric_popup(
             title="Set Temperature",
@@ -604,7 +612,7 @@ def build_ui(app: ctk.CTk) -> UI:
 
     # Time Remaining
     time_card.grid_columnconfigure(0, weight=1)
-    ctk.CTkLabel(time_card, text="Time Remaining", font=("SF Pro Text", 16, "bold")).grid(
+    ctk.CTkLabel(time_card, text="Time Remaining", font=("SF Pro Text", 32, "bold")).grid(
         row=0, column=0, sticky="w", padx=14, pady=(14, 10)
     )
 
@@ -616,7 +624,7 @@ def build_ui(app: ctk.CTk) -> UI:
         return f"{h:02d}:{m:02d}:{sec:02d}"
 
     remaining_text = ctk.StringVar(value="00:00")
-    ctk.CTkLabel(time_card, textvariable=remaining_text, font=("SF Pro Display", 34, "bold")).grid(
+    ctk.CTkLabel(time_card, textvariable=remaining_text, font=("SF Pro Display", 92, "bold")).grid(
         row=1, column=0, sticky="w", padx=14, pady=(0, 14)
     )
 
@@ -681,60 +689,82 @@ def build_ui(app: ctk.CTk) -> UI:
     # --------------------------
     # Status Page Layout
     # --------------------------
+    status_card_color = "#F6F7F9"
+    status_title_font = ("SF Pro Text", 40, "bold")
+    status_value_font = ("SF Pro Display", 68)
+    status_detail_font = ("SF Pro Text", 36)
+    status_card_pad = 18
+
     content = ctk.CTkFrame(page_status, corner_radius=0, fg_color="white")
     content.pack(fill="both", expand=True, padx=0, pady=0)
     content.grid_columnconfigure((0,1), weight=1)
-    content.grid_rowconfigure((0,1), weight=1)
+    content.grid_rowconfigure((0, 1), weight=1)
 
-    tempCard = ctk.CTkFrame(content, corner_radius=16, fg_color="#F6F7F9")
-    tempCard.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-    ctk.CTkLabel(tempCard, text="Temperature", font=("SF Pro Text",16,"bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(12,4))
+    tempCard = ctk.CTkFrame(content, corner_radius=16, fg_color=status_card_color)
+    tempCard.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
+    tempCard.grid_columnconfigure(0, weight=1)
+    tempCard.grid_rowconfigure(1, weight=1)
+    ctk.CTkLabel(tempCard, text="Temperature", font=status_title_font).grid(
+        row=0, column=0, sticky="w", padx=status_card_pad, pady=(status_card_pad, 6)
+    )
     tempNowF = ctk.StringVar(value="—")
     tempSetF = ctk.StringVar(value="Set: —")
-    ctk.CTkLabel(tempCard, textvariable=tempNowF, font=("SF Pro Display", 24, "bold")).grid(row=1, column=0, sticky="w", padx=12, pady=(4, 0))
-    ctk.CTkLabel(tempCard, textvariable=tempSetF, font=("SF Pro Text", 14), text_color="gray40").grid(row=2, column=0, sticky="w", padx=12, pady=(2, 12))
+    ctk.CTkLabel(tempCard, textvariable=tempNowF, font=status_value_font).grid(
+        row=1, column=0, sticky="w", padx=status_card_pad, pady=(8, 2)
+    )
+    ctk.CTkLabel(tempCard, textvariable=tempSetF, font=status_detail_font, text_color="gray40").grid(
+        row=2, column=0, sticky="w", padx=status_card_pad, pady=(0, status_card_pad)
+    )
 
-    flowCard = ctk.CTkFrame(content, corner_radius=16, fg_color="#F6F7F9")
-    flowCard.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
-    ctk.CTkLabel(flowCard, text="Flow Rate (L/min)", font=("SF Pro Text",16,"bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(12,4))
+    flowCard = ctk.CTkFrame(content, corner_radius=16, fg_color=status_card_color)
+    flowCard.grid(row=0, column=1, sticky="nsew", padx=12, pady=12)
+    flowCard.grid_columnconfigure(0, weight=1)
+    flowCard.grid_rowconfigure(1, weight=1)
+    ctk.CTkLabel(flowCard, text="Flow Rate", font=status_title_font).grid(
+        row=0, column=0, sticky="w", padx=status_card_pad, pady=(status_card_pad, 6)
+    )
     flow = ctk.StringVar(value="—")
-    ctk.CTkLabel(flowCard, textvariable=flow, font=("SF Pro Text", 20)).grid(row=1, column=0, sticky="w", padx=12, pady=(4, 12))
+    ctk.CTkLabel(flowCard, textvariable=flow, font=status_value_font).grid(
+        row=1, column=0, sticky="w", padx=status_card_pad, pady=(8, status_card_pad)
+    )
 
-    turbCard = ctk.CTkFrame(content, corner_radius=16, fg_color="#F6F7F9")
-    turbCard.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
-    ctk.CTkLabel(turbCard, text="Turbidity", font=("SF Pro Text",16,"bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(12,4))
-    turbPct = ctk.StringVar(value="—")
-    ntu = ctk.StringVar(value="—")
-    ctk.CTkLabel(turbCard, textvariable=turbPct, font=("SF Pro Text", 24)).grid(row=1, column=0, sticky="w", padx=12, pady=4)
-    ctk.CTkLabel(turbCard, textvariable=ntu, font=("SF Pro Text", 14), text_color="gray40").grid(row=2, column=0, sticky="w", padx=12, pady=(0, 12))
-
-    levelCard = ctk.CTkFrame(content, corner_radius=16, fg_color="#F6F7F9")
-    levelCard.grid(row=1, column=1, sticky="nsew", padx=10, pady=10)
-    ctk.CTkLabel(levelCard, text="Liquid Level", font=("SF Pro Text",16,"bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(12,4))
+    levelCard = ctk.CTkFrame(content, corner_radius=16, fg_color=status_card_color)
+    levelCard.grid(row=1, column=0, sticky="nsew", padx=12, pady=12)
+    levelCard.grid_columnconfigure((0, 1), weight=1)
+    levelCard.grid_rowconfigure(1, weight=1)
+    ctk.CTkLabel(levelCard, text="Liquid Level", font=status_title_font).grid(
+        row=0, column=0, sticky="w", padx=status_card_pad, pady=(status_card_pad, 6)
+    )
     levelText = ctk.StringVar(value="—")
-    ctk.CTkLabel(levelCard, textvariable=levelText, font=("SF Pro Text", 20)).grid(row=1, column=0, sticky="w", padx=12, pady=(4,12))
-    ctk.CTkLabel(levelCard, text="Lid Interlock", font=("SF Pro Text",16,"bold")).grid(row=0, column=1, sticky="w", padx=12, pady=(12,4))
+    ctk.CTkLabel(levelCard, textvariable=levelText, font=status_value_font).grid(
+        row=1, column=0, sticky="w", padx=status_card_pad, pady=(8, status_card_pad)
+    )
+    ctk.CTkLabel(levelCard, text="Lid Interlock", font=status_title_font).grid(
+        row=0, column=1, sticky="w", padx=status_card_pad, pady=(status_card_pad, 6)
+    )
     lidText = ctk.StringVar(value="—")
-    ctk.CTkLabel(levelCard, textvariable=lidText, font=("SF Pro Text", 20)).grid(row=1, column=1, sticky="w", padx=12, pady=(4,12))
+    ctk.CTkLabel(levelCard, textvariable=lidText, font=status_value_font).grid(
+        row=1, column=1, sticky="w", padx=status_card_pad, pady=(8, status_card_pad)
+    )
 
-    heaterCard = ctk.CTkFrame(content, corner_radius=16)
-    heaterCard.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=10, pady=10)
-    ctk.CTkLabel(heaterCard, text="Heater", font=("SF Pro Text",16,"bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(12,6))
+    heaterCard = ctk.CTkFrame(content, corner_radius=16, fg_color=status_card_color)
+    heaterCard.grid(row=1, column=1, sticky="nsew", padx=12, pady=12)
+    heaterCard.grid_columnconfigure(0, weight=1)
+    heaterCard.grid_columnconfigure(1, weight=1)
+    heaterCard.grid_rowconfigure(1, weight=1)
+    ctk.CTkLabel(heaterCard, text="Actuators", font=status_title_font).grid(
+        row=0, column=0, sticky="w", padx=status_card_pad, pady=(status_card_pad, 6)
+    )
 
-    heaterEnableVar = ctk.BooleanVar(value=False)
-    heaterStatusText = ctk.StringVar(value="Disabled")
-    heaterOutText = ctk.StringVar(value="Output: —")
+    heaterOutText = ctk.StringVar(value="—")
     heaterWarnText = ctk.StringVar(value="")
 
-    heater_switch = ctk.CTkSwitch(heaterCard, text="Enable", variable=heaterEnableVar, command=lambda: None)
-    heater_switch.grid(row=0, column=1, sticky="e", padx=12, pady=(12,6))
-    ctk.CTkLabel(heaterCard, textvariable=heaterOutText, font=("SF Pro Text", 14), text_color="gray40").grid(
-        row=3, column=0, sticky="w", padx=12, pady=(0,8)
+    ctk.CTkLabel(heaterCard, textvariable=heaterOutText, font=status_value_font).grid(
+        row=1, column=0, sticky="w", padx=status_card_pad, pady=(8, 2)
     )
-    ctk.CTkLabel(heaterCard, textvariable=heaterWarnText, font=("SF Pro Text", 14, "bold"), text_color="red").grid(
-        row=4, column=0, columnspan=2, sticky="w", padx=12, pady=(0,12)
+    ctk.CTkLabel(heaterCard, textvariable=heaterWarnText, font=("SF Pro Text", 28, "bold"), text_color="red").grid(
+        row=2, column=0, columnspan=2, sticky="w", padx=status_card_pad, pady=(0, status_card_pad)
     )
-    heaterCard.grid_columnconfigure(0, weight=1)
 
     # default page
     show_page("operation")
@@ -753,18 +783,13 @@ def build_ui(app: ctk.CTk) -> UI:
         tempNowF=tempNowF,
         tempSetF=tempSetF,
         flow=flow,
-        turbPct=turbPct,
-        ntu=ntu,
         levelText=levelText,
         lidText=lidText,
-        heaterEnableVar=heaterEnableVar,
-        heaterStatusText=heaterStatusText,
         heaterOutText=heaterOutText,
         heaterWarnText=heaterWarnText,
         btn_start=btn_start,
         btn_pause=btn_pause,
         btn_stop=btn_stop,
-        heater_switch=heater_switch,
         set_card=set_card,
         time_card=time_card,
         action=action,

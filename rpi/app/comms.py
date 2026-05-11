@@ -2,6 +2,8 @@
 
 import threading, time, queue, serial
 
+STARTUP_DISCARD_S = 2.0
+
 class SerialClient:
     """Background serial reader with queued line delivery."""
     def __init__(self, port: str, baud: int, rx_queue: "queue.Queue[tuple[str,str]]", tx_lock=None):
@@ -44,11 +46,18 @@ class SerialClient:
         """Continuously read the serial port and enqueue lines."""
         while not self._stop.is_set():
             try:
-                self._ser = serial.Serial(self.port, self.baud, timeout=1)
+                self._ser = serial.Serial(self.port, self.baud, timeout=1, write_timeout=1)
+                self._ser.dtr = False
+                self._ser.rts = False
                 self.connected = True
                 self.last_disconnect_reason = ""
                 self.last_rx_time = time.time()
                 self.q.put(("status", f"Connected: {self.port}"))
+
+                time.sleep(STARTUP_DISCARD_S)
+                if self._stop.is_set():
+                    break
+                self._ser.reset_input_buffer()
 
                 while not self._stop.is_set():
                     line = self._ser.readline().decode("utf-8", "ignore").strip()

@@ -3,10 +3,16 @@ import json
 from typing import Any, Dict, Optional
 from app.state import AppModel
 
+_JSON_DECODER = json.JSONDecoder()
+
 def parse_line(line: str) -> Optional[Dict[str, Any]]:
-    """Return a dict if the line is a valid JSON object."""
+    """Return a dict from a serial line, tolerating startup noise before JSON."""
     try:
-        msg = json.loads(line)
+        start = line.find("{")
+        if start < 0:
+            return None
+
+        msg, _ = _JSON_DECODER.raw_decode(line[start:])
         if isinstance(msg, dict):
             return msg
         return None
@@ -41,9 +47,6 @@ def apply_message(model: AppModel, m: Dict[str, Any]) -> None:
     t.secLowFlow = m.get("secLowFlow")
     t.flowFault = m.get("flowFault")
 
-    t.turbidity_pct = float(m.get("% Turbidity", 0) or 0)
-    t.NTU = float(m.get("NTU", 0) or 0)
-
     t.heaterEnable = m.get("heaterEnable", None)
     t.setTempF = m.get("setTempF", None)
     t.heaterDemand = m.get("heaterDemand", None)
@@ -63,7 +66,6 @@ def apply_message(model: AppModel, m: Dict[str, Any]) -> None:
     t.cycleTempSetF = m.get("cycleTempSetF", None)
     t.flowLowThresholdLpm = m.get("flowLowThresholdLpm", None)
     t.flowLowLimitS = m.get("flowLowLimitS", None)
-    t.turbidityFaultPct = m.get("turbidityFaultPct", None)
     t.faultActive = m.get("faultActive", None)
     t.faultFlags = m.get("faultFlags", None)
     t.faultCode = m.get("faultCode", None)

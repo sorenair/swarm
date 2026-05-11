@@ -11,7 +11,7 @@ enum CycleState : uint8_t {
 };
 
 static const char* cycleStateToStr(CycleState s);
-uint16_t computeFaultFlags(bool okTemp, float tempF, bool levelOk, bool lidClosed, bool okTur, float turbPctScaled);
+uint16_t computeFaultFlags(bool okTemp, float tempF, bool levelOk, bool lidClosed);
 const char* primaryFaultCodeFromFlags(uint16_t flags);
 void printFaultCodeArray(uint16_t flags);
 
@@ -21,8 +21,7 @@ enum FaultFlags : uint16_t {
   FAULT_LOW_LEVEL        = 1 << 2,
   FAULT_LID_OPEN         = 1 << 3,
   FAULT_FLOW_LOW         = 1 << 4,
-  FAULT_TURBIDITY_HIGH   = 1 << 5,
-  FAULT_HEATER_SHUTDOWN  = 1 << 6
+  FAULT_HEATER_SHUTDOWN  = 1 << 5
 };
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -48,13 +47,13 @@ unsigned long lastTick = 0;
 
 // Low flow detection
 const float FLOW_LOW_LPM = 2.0f;     // warning threshold
-const uint8_t FLOW_LOW_LIMIT_S = 20; // hard fault after 20 continuous seconds
-const float TURBIDITY_FAULT_PCT = 80.0f;
+const uint8_t FLOW_LOW_LIMIT_S = 20; // non-blocking fault after 20 continuous seconds
 
 bool flowLow = false;     // live warning condition
-bool flowFault = false;   // hard latched flow fault
+bool flowFault = false;   // non-blocking latched flow fault
 uint8_t secLowFlow = 0;   // consecutive seconds below threshold
 CycleState cycleState = CYCLE_IDLE;
+bool blockingFaultActive = false;
 
 void IRAM_ATTR pulseISR()
 {
@@ -178,14 +177,22 @@ float ntuEstimateFromPct(uint8_t pct)
 #define LID_LOCK 21 // GPIO for lid interlock switch (one lead here, other to GND)
 
 /////////////////////////////////////////////////////////////////////////////////
+// STATUS LEDs
+/////////////////////////////////////////////////////////////////////////////////
+
+#define GREEN_LED 13 // GPIO for green LED switch (one lead here, other to GND)
+#define YELLOW_LED 12 // GPIO for yellow LED switch (one lead here, other to GND)
+#define RED_LED 14 // GPIO for red LED switch (one lead here, other to GND)
+
+/////////////////////////////////////////////////////////////////////////////////
 // HEATER
 /////////////////////////////////////////////////////////////////////////////////
 
 #define HEATER_LED 4
-const float OVER_F = 102.0f;
+const float OVER_F = 120.0f;
 const uint8_t OVER_TEMP_LIMIT_S = 20;
 float setTempF = 95.0f;
-uint8_t secOver = 0;
+uint8_t secOver = 0;  
 bool heaterStop = false;
 bool heaterOn = false;
 bool heaterEn = false;
@@ -367,7 +374,7 @@ void handleMotorCommand(const String &line)
 int32_t cycleRemainingS = 0;
 
 // Defaults for wash behavior (tune for your machine)
-uint8_t cycleMotorDuty = 100;     // 0..255
+uint8_t cycleMotorDuty = 255;     // 0..255
 bool cycleMotorFwd = true;
 
 static const char* cycleStateToStr(CycleState s)
@@ -403,7 +410,12 @@ bool shouldPreheat(float tempF)
   return tempF < cycleUpperSetpointF();
 }
 
-uint16_t computeFaultFlags(bool okTemp, float tempF, bool levelOk, bool lidClosed, bool okTur, float turbPctScaled)
+bool shouldReportLidFault()
+{
+  return cycleState == CYCLE_WASHING || cycleState == CYCLE_PAUSED || cycleState == CYCLE_FAULT;
+}
+
+uint16_t computeFaultFlags(bool okTemp, float tempF, bool levelOk, bool lidClosed)
 {
   uint16_t flags = 0;
 
@@ -422,7 +434,7 @@ uint16_t computeFaultFlags(bool okTemp, float tempF, bool levelOk, bool lidClose
     flags |= FAULT_LOW_LEVEL;
   }
 
-  if (!lidClosed)
+  if (!lidClosed && shouldReportLidFault())
   {
     flags |= FAULT_LID_OPEN;
   }
@@ -430,11 +442,6 @@ uint16_t computeFaultFlags(bool okTemp, float tempF, bool levelOk, bool lidClose
   if (flowFault)
   {
     flags |= FAULT_FLOW_LOW;
-  }
-
-  if (okTur && !isnan(turbPctScaled) && turbPctScaled >= TURBIDITY_FAULT_PCT)
-  {
-    flags |= FAULT_TURBIDITY_HIGH;
   }
 
   if (heaterStop)
@@ -452,7 +459,6 @@ const char* primaryFaultCodeFromFlags(uint16_t flags)
   if (flags & FAULT_OVERTEMP) return "OVERTEMP";
   if (flags & FAULT_LOW_LEVEL) return "LOW_LEVEL";
   if (flags & FAULT_LID_OPEN) return "LID_OPEN";
-  if (flags & FAULT_TURBIDITY_HIGH) return "HIGH_TURBIDITY";
   if (flags & FAULT_TEMP_SENSOR) return "TEMP_SENSOR";
   return "NONE";
 }
@@ -492,12 +498,6 @@ void printFaultCodeArray(uint16_t flags)
     Serial.print("\"LID_OPEN\"");
     first = false;
   }
-  if (flags & FAULT_TURBIDITY_HIGH)
-  {
-    if (!first) Serial.print(",");
-    Serial.print("\"HIGH_TURBIDITY\"");
-    first = false;
-  }
   if (flags & FAULT_TEMP_SENSOR)
   {
     if (!first) Serial.print(",");
@@ -517,14 +517,18 @@ void cycleApplyOutputsForState()
 {
   if (cycleState == CYCLE_PREHEATING)
   {
-    heaterEn = true;
-    motorDrive(cycleMotorDuty, cycleMotorFwd);
+    //heaterEn = true;
+    //motorDrive(cycleMotorDuty, cycleMotorFwd);
+    heaterEn = false;
+    motorStop();
   }
   else if (cycleState == CYCLE_WASHING)
   {
     // Heater remains subject to lidClosed + bang-bang + overtemp shutoff in loop()
-    heaterEn = true;
-    motorDrive(cycleMotorDuty, cycleMotorFwd);
+    //heaterEn = true;
+    //motorDrive(cycleMotorDuty, cycleMotorFwd);
+    heaterEn = false;
+    motorStop();
   }
   else if (cycleState == CYCLE_PAUSED || cycleState == CYCLE_COMPLETE || cycleState == CYCLE_FAULT)
   {
@@ -555,6 +559,7 @@ void handleCycleCommand(const String &line)
       cycleRemainingS = max(0, secs);
       if (n >= 2) setTempF = tF;
       heaterDemandLatched = false;
+      blockingFaultActive = false;
 
       if (cycleRemainingS <= 0)
       {
@@ -623,6 +628,7 @@ void handleCycleCommand(const String &line)
     cycleState = CYCLE_IDLE;
     cycleRemainingS = 0;
     heaterDemandLatched = false;
+    blockingFaultActive = false;
     cycleApplyOutputsForState();
 
     Serial.println("{\"ack\":\"CYCLE\",\"cmd\":\"STOP\",\"state\":\"IDLE\"}");
@@ -637,15 +643,15 @@ void handleCycleCommand(const String &line)
 // FAULT HANDLER
 /////////////////////////////////////////////////////////////////////////////////
 
-bool hasActiveFault(bool okTemp, float tempF, bool levelOk, bool lidClosed, bool okTur, float turbPctScaled)
+bool hasActiveFault(bool okTemp, float tempF, bool levelOk, bool lidClosed)
 {
-  uint16_t flags = computeFaultFlags(okTemp, tempF, levelOk, lidClosed, okTur, turbPctScaled);
+  uint16_t flags = computeFaultFlags(okTemp, tempF, levelOk, lidClosed);
 
   // Always honor latched heater shutdown
   if (flags & FAULT_HEATER_SHUTDOWN) return true;
 
-  // Only treat process faults as blocking while actively washing
-  if (cycleState == CYCLE_WASHING || cycleState == CYCLE_PREHEATING)
+  // Only safety-critical process faults should block machine operation.
+  if (cycleState == CYCLE_WASHING || cycleState == CYCLE_PREHEATING || cycleState == CYCLE_FAULT)
   {
     uint16_t blockingMask =
       FAULT_TEMP_SENSOR |
@@ -653,20 +659,16 @@ bool hasActiveFault(bool okTemp, float tempF, bool levelOk, bool lidClosed, bool
       FAULT_LOW_LEVEL |
       FAULT_LID_OPEN;
 
-    if (cycleState == CYCLE_WASHING)
-    {
-      blockingMask |= FAULT_FLOW_LOW;
-    }
-
     return (flags & blockingMask) != 0;
   }
 
   return false;
 }
 
-void faultHandler(bool okTemp, float tempF, bool levelOk, bool lidClosed, bool okTur, float turbPctScaled)
+void faultHandler(bool okTemp, float tempF, bool levelOk, bool lidClosed)
 {
-  bool fault = hasActiveFault(okTemp, tempF, levelOk, lidClosed, okTur, turbPctScaled);
+  bool fault = hasActiveFault(okTemp, tempF, levelOk, lidClosed);
+  blockingFaultActive = fault;
 
   // If a blocking fault occurs during an active process, pause into FAULT state
   if (fault && (cycleState == CYCLE_WASHING || cycleState == CYCLE_PREHEATING))
@@ -686,6 +688,46 @@ void faultHandler(bool okTemp, float tempF, bool levelOk, bool lidClosed, bool o
 }
 
 /////////////////////////////////////////////////////////////////////////////////
+// LED HANDLER
+/////////////////////////////////////////////////////////////////////////////////
+
+void updateStatusLEDs()
+{
+  static unsigned long lastBlink = 0;
+  static bool blinkState = false;
+
+  // Default all LEDs off
+  digitalWrite(GREEN_LED, LOW);
+  digitalWrite(YELLOW_LED, LOW);
+  digitalWrite(RED_LED, LOW);
+
+  if (blockingFaultActive)
+  {
+    digitalWrite(RED_LED, HIGH);
+  }
+  else if (cycleState == CYCLE_IDLE || cycleState == CYCLE_COMPLETE)
+  {
+    digitalWrite(GREEN_LED, HIGH);
+  }
+  else if (cycleState == CYCLE_PREHEATING || cycleState == CYCLE_WASHING)
+  {
+    digitalWrite(YELLOW_LED, HIGH);
+  }
+  else if (cycleState == CYCLE_PAUSED)
+  {
+    unsigned long now = millis();
+
+    if (now - lastBlink >= 500)
+    {
+      lastBlink = now;
+      blinkState = !blinkState;
+    }
+
+    digitalWrite(YELLOW_LED, blinkState ? HIGH : LOW);
+  }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
 // SETUP AND INITIALIZATION
 /////////////////////////////////////////////////////////////////////////////////
 
@@ -701,8 +743,7 @@ void setup()
   attachInterrupt(digitalPinToInterrupt(FLOW), pulseISR, RISING);
   lastTick = millis();
 
-  // TURBIDITY (9600 8N1 as per DFRobot sample)
-  Turb.begin(9600, SERIAL_8N1, TURB_RX, TURB_TX);
+  // Turbidity support is retained above but inactive while the sensor is not installed.
 
   // HEATER
   pinMode(HEATER_LED, OUTPUT);
@@ -722,6 +763,15 @@ void setup()
 
   // LID INTERLOCK
   pinMode(LID_LOCK, INPUT_PULLUP);
+
+  // STATUS LEDs
+  pinMode(GREEN_LED, OUTPUT);
+  pinMode(YELLOW_LED, OUTPUT);
+  pinMode(RED_LED, OUTPUT);
+
+  digitalWrite(GREEN_LED, LOW);
+  digitalWrite(YELLOW_LED, LOW);
+  digitalWrite(RED_LED, LOW);
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -748,12 +798,6 @@ void loop()
     float tempF = okT ? (tempC * 9.0f / 5.0f + 32.0f) : NAN;
     currentTempValid = okT;
     currentTempF = tempF;
-
-    // TURBIDITY
-    uint8_t turbPct = 0;
-    bool okTur = readTurbidity(turbPct);
-    float ntu = okTur ? ntuEstimateFromPct(turbPct) : NAN;
-    float turbPctScaled = (turbPct / 243.0f) * 100.0f;
 
     // FLOAT SWITCH
     bool levelRaw = digitalRead(LEVEL_SW);   // HIGH = open, LOW = closed
@@ -784,7 +828,7 @@ void loop()
     }
 
     //faultHandler call
-    faultHandler(okT, tempF, levelOk, lidClosed, okTur, turbPctScaled);
+    faultHandler(okT, tempF, levelOk, lidClosed);
     
     // HEATER
     bool demandHeat = false;
@@ -799,7 +843,7 @@ void loop()
     }
 
     setHeaterLED(tempF, demandHeat);
-    uint16_t faultFlags = computeFaultFlags(okT, tempF, levelOk, lidClosed, okTur, turbPctScaled);
+    uint16_t faultFlags = computeFaultFlags(okT, tempF, levelOk, lidClosed);
     const char* faultCode = primaryFaultCodeFromFlags(faultFlags);
     
     // JSON OUT
@@ -821,16 +865,6 @@ void loop()
       Serial.print(",\"F\":"); Serial.print(tempF, 2);
     }
     
-    if (okTur)
-    {
-      Serial.print(",\"% Turbidity\":"); Serial.print(turbPctScaled, 1);
-      Serial.print(",\"NTU\":"); Serial.print(ntu, 1);
-    }
-    else
-    {
-      Serial.print(",\"turbPct\":null,\"ntu\":null");
-    }
-
     // Float switch status
     Serial.print(",\"levelOk\":");
     Serial.print(levelOk ? "true" : "false");
@@ -874,9 +908,6 @@ void loop()
 
     Serial.print(",\"flowLowLimitS\":");
     Serial.print(FLOW_LOW_LIMIT_S);
-
-    Serial.print(",\"turbidityFaultPct\":");
-    Serial.print(TURBIDITY_FAULT_PCT, 1);
 
     // Lid Interlock Status
     Serial.print(",\"lidClosed\":");
@@ -935,6 +966,8 @@ void loop()
       handleCycleCommand(line);
     }
   }
+
+  updateStatusLEDs();
 
   delay(950);  // maintain 1 Hz update rate
 }

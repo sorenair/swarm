@@ -221,9 +221,6 @@ def log_telemetry(logger: AsyncLogger, model: AppModel, ui: Dict[str, Any]) -> N
         "C": t.C,
         "F": t.F,
         "flowLpm": t.flowLpm,
-        "turbidity_pct": t.turbidity_pct,
-        "NTU": t.NTU,
-
         "heaterEnable": t.heaterEnable,
         "setTempF": t.setTempF,
         "heaterDemand": t.heaterDemand,
@@ -234,7 +231,6 @@ def log_telemetry(logger: AsyncLogger, model: AppModel, ui: Dict[str, Any]) -> N
         "levelOk": t.levelOk,
         "lidClosed": t.lidClosed,
 
-        "ui_heater_enable": ui.get("ui_heater_enable"),
         "ui_cycle_state": ui.get("ui_cycle_state"),
         "ui_cycle_remaining_s": ui.get("ui_cycle_remaining_s"),
         "ui_cycle_duration_s": ui.get("ui_cycle_duration_s"),

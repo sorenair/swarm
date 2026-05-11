@@ -37,7 +37,7 @@ EVENT_HEADERS = [
     "raw",
     "cycle_state", "cycle_duration_s", "cycle_remaining_s",
     "setTempF",
-    "F", "flowLpm", "turbidity_pct", "NTU",
+    "F", "flowLpm",
     "heaterEnable", "heaterDemand", "heaterOn",
     "overTemp", "secOver", "heaterStop",
     "levelOk", "lidClosed",
@@ -72,10 +72,6 @@ FAULT_DISPLAY = {
     "LID_OPEN": {
         "title": "Lid is open",
         "detail": "Close lid to continue operation.",
-    },
-    "HIGH_TURBIDITY": {
-        "title": "High turbidity",
-        "detail": "Turbidity exceeded the controller threshold.",
     },
     "TEMP_SENSOR": {
         "title": "Temperature sensor fault",
@@ -172,15 +168,10 @@ def main():
         ui.cycle_remaining_s.set(0)
         controller.stop_cycle()
 
-    def on_heater_toggle():
-        log_cycle_snapshot(logger, ui)
-        controller.set_heater_enable(bool(ui.heaterEnableVar.get()))
-
     app.bind("<Escape>", on_close)
     ui.btn_start.configure(command=start_cycle)
     ui.btn_pause.configure(command=pause_resume_cycle)
     ui.btn_stop.configure(command=stop_cycle)
-    ui.heater_switch.configure(command=on_heater_toggle)
 
     # ------------------------------------------
     # Store Machine State in Model and Update UI
@@ -206,8 +197,6 @@ def main():
 
         ui.tempNowF.set(f"{t.F:.1f} °F")
         ui.flow.set(f"{t.flowLpm:.2f} L/min")
-        ui.turbPct.set(f"{t.turbidity_pct:.1f} %")
-        ui.ntu.set(f"{t.NTU:.1f} NTU")
 
         if t.setTempF is not None:
             ui.tempSetF.set(f"Set: {float(t.setTempF):.1f} °F")
@@ -215,10 +204,10 @@ def main():
             ui.tempSetF.set("Set: —")
 
         if isinstance(t.lidClosed, bool):
-            ui.lidText.set("Lid is closed" if t.lidClosed else "Lid is open")
+            ui.lidText.set("CLOSED" if t.lidClosed else "OPEN")
 
         if isinstance(t.levelOk, bool):
-            ui.levelText.set("OK" if t.levelOk else "LOW / FAULT")
+            ui.levelText.set("OK" if t.levelOk else "LOW")
 
         # cycle
         if isinstance(t.cycleState, str) and t.cycleState:
@@ -231,22 +220,10 @@ def main():
 
         handle_faults(t, ui)
 
-        # heater enable (ESP32 authoritative)
-        if isinstance(t.heaterEnable, bool):
-            ui.heaterEnableVar.set(t.heaterEnable)
-
-        status_parts = []
-        if isinstance(t.heaterEnable, bool):
-            status_parts.append("Enabled" if t.heaterEnable else "Disabled")
-        if isinstance(t.heaterDemand, bool):
-            status_parts.append(f"Demand: {'ON' if t.heaterDemand else 'OFF'}")
         if isinstance(t.heaterOn, bool):
-            status_parts.append(f"Output: {'ON' if t.heaterOn else 'OFF'}")
-
-        ui.heaterStatusText.set(" | ".join(status_parts) if status_parts else "—")
-        ui.heaterOutText.set(
-            f"Output: {'ON' if t.heaterOn else 'OFF'}" if isinstance(t.heaterOn, bool) else "Output: —"
-        )
+            ui.heaterOutText.set(f"{'ENABLED' if t.heaterOn else 'DISABLED'}")
+        else:
+            ui.heaterOutText.set("—")
 
         # Overtemp shutoff
         over_temp_limit_s = int(t.overTempLimitS) if isinstance(t.overTempLimitS, (int, float)) else None
@@ -309,9 +286,6 @@ def main():
         faults = controller_faults_for_display(t)
         active_faults = [fault.get("code", "") for fault in faults]
 
-        if "LID_OPEN" in active_faults and ui.heaterEnableVar.get():
-            ui.heaterEnableVar.set(False)
-
         snapshot = tuple(sorted((f.get("code", ""), f.get("title", ""), f.get("detail", "")) for f in faults))
 
         if snapshot == last_faults_snapshot:
@@ -328,7 +302,11 @@ def main():
     # ------------------------------
     # Poll Serial Queue and Log Data
     # ------------------------------
+    bad_json_count = 0
+
     def poll_queue():
+        nonlocal bad_json_count
+
         try:
             while True:
                 kind, payload = q.get_nowait()
@@ -342,13 +320,18 @@ def main():
 
                 m = parse_line(payload)
                 if m is None:
-                    ui.title_status.set("Bad JSON")
+                    bad_json_count += 1
+                    if not model.telemetry.ok and bad_json_count >= 5:
+                        ui.title_status.set("Waiting for telemetry")
                     logger.log_status(now_iso(), f"Bad JSON: {payload[:200]}")
                     continue
 
+                bad_json_count = 0
                 apply_message(model, m)
 
-                if model.status_line:
+                if m.get("ok"):
+                    ui.title_status.set("Receiving telemetry")
+                elif model.status_line:
                     ui.title_status.set(model.status_line)
 
                 render_from_model(model)
@@ -370,11 +353,8 @@ def main():
                         # Telemetry fields
                         "F": t.F,
                         "flowLpm": t.flowLpm,
-                        "turbidity_pct": t.turbidity_pct,
-                        "NTU": t.NTU,
                         # Heater state fields
                         "heaterEnable": t.heaterEnable,
-                        #"ui_heater_enable": ui.heaterEnableVar.get(),
                         "heaterDemand": t.heaterDemand,
                         "heaterOn": t.heaterOn,
                         "heaterStop": t.heaterStop,

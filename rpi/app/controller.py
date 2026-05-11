@@ -29,7 +29,3 @@ class Controller:
     def stop_cycle(self):
         """Send the stop-cycle command."""
         self._send("CYCLE STOP")
-
-    def set_heater_enable(self, enabled: bool):
-        """Enable or disable the heater."""
-        self._send(f"HEATER {1 if enabled else 0}")

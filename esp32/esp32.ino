@@ -517,18 +517,14 @@ void cycleApplyOutputsForState()
 {
   if (cycleState == CYCLE_PREHEATING)
   {
-    //heaterEn = true;
-    //motorDrive(cycleMotorDuty, cycleMotorFwd);
-    heaterEn = false;
-    motorStop();
+    heaterEn = true;
+    motorDrive(cycleMotorDuty, cycleMotorFwd);
   }
   else if (cycleState == CYCLE_WASHING)
   {
     // Heater remains subject to lidClosed + bang-bang + overtemp shutoff in loop()
-    //heaterEn = true;
-    //motorDrive(cycleMotorDuty, cycleMotorFwd);
-    heaterEn = false;
-    motorStop();
+    heaterEn = true;
+    motorDrive(cycleMotorDuty, cycleMotorFwd);
   }
   else if (cycleState == CYCLE_PAUSED || cycleState == CYCLE_COMPLETE || cycleState == CYCLE_FAULT)
   {

@@ -752,7 +752,7 @@ def build_ui(app: ctk.CTk) -> UI:
     heaterCard.grid_columnconfigure(0, weight=1)
     heaterCard.grid_columnconfigure(1, weight=1)
     heaterCard.grid_rowconfigure(1, weight=1)
-    ctk.CTkLabel(heaterCard, text="Actuators", font=status_title_font).grid(
+    ctk.CTkLabel(heaterCard, text="Heaters", font=status_title_font).grid(
         row=0, column=0, sticky="w", padx=status_card_pad, pady=(status_card_pad, 6)
     )
 

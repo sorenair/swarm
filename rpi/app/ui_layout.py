@@ -36,6 +36,13 @@ class UI:
     heaterOutText: ctk.StringVar
     heaterWarnText: ctk.StringVar
 
+    # log page controls
+    logPathText: ctk.StringVar
+    logStatusText: ctk.StringVar
+    logDetailText: ctk.StringVar
+    logPreviewBox: ctk.CTkTextbox
+    btn_log_refresh: ctk.CTkButton
+
     # widgets main will bind commands to
     btn_start: ctk.CTkButton
     btn_pause: ctk.CTkButton
@@ -91,8 +98,9 @@ def build_ui(app: ctk.CTk) -> UI:
     page_operation = ctk.CTkFrame(page_container, corner_radius=0, fg_color="white")
     page_status    = ctk.CTkFrame(page_container, corner_radius=0, fg_color="white")
     page_faults    = ctk.CTkFrame(page_container, corner_radius=0, fg_color="white")
+    page_logs      = ctk.CTkFrame(page_container, corner_radius=0, fg_color="white")
 
-    for p in (page_operation, page_status, page_faults):
+    for p in (page_operation, page_status, page_faults, page_logs):
         p.grid(row=0, column=0, sticky="nsew")
 
     def show_page(name: str):
@@ -102,9 +110,12 @@ def build_ui(app: ctk.CTk) -> UI:
         elif name == "status":
             page_status.tkraise()
             header_title.set("System Status")
-        else:
+        elif name == "faults":
             page_faults.tkraise()
             header_title.set("System Faults")
+        else:
+            page_logs.tkraise()
+            header_title.set("Log Check")
 
     # --------------------------
     # Faults page
@@ -171,23 +182,24 @@ def build_ui(app: ctk.CTk) -> UI:
     nav_btns = ctk.CTkFrame(nav, corner_radius=0, fg_color="transparent")
     nav_btns.pack(fill="both", expand=True, padx=0, pady=0)
     nav_btns.grid_rowconfigure(0, weight=1)
-    nav_btns.grid_rowconfigure(4, weight=1)
+    nav_btns.grid_rowconfigure(5, weight=2)
     nav_btns.grid_columnconfigure(0, weight=1)
 
     def nav_button(parent, text, command):
         return ctk.CTkButton(
             parent, text=text, command=command,
             font=("SF Pro Text", 30, "bold"),
-            height=164, corner_radius=10,
+            height=120, corner_radius=10,
             fg_color="#FFFFFF", hover_color="#EDEFF3",
             text_color="black", anchor="w"
         )
 
     ctk.CTkFrame(nav_btns, fg_color="transparent").grid(row=0, column=0, sticky="nsew")
-    nav_button(nav_btns, "Operation", lambda: show_page("operation")).grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 48))
-    nav_button(nav_btns, "Status",    lambda: show_page("status")).grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 48))
-    nav_button(nav_btns, "Faults",    lambda: show_page("faults")).grid(row=3, column=0, sticky="ew", padx=12, pady=(0, 48))
-    ctk.CTkFrame(nav_btns, fg_color="transparent").grid(row=4, column=0, sticky="nsew")
+    nav_button(nav_btns, "Operation", lambda: show_page("operation")).grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 26))
+    nav_button(nav_btns, "Status",    lambda: show_page("status")).grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 26))
+    nav_button(nav_btns, "Faults",    lambda: show_page("faults")).grid(row=3, column=0, sticky="ew", padx=12, pady=(0, 26))
+    nav_button(nav_btns, "Logs",      lambda: show_page("logs")).grid(row=4, column=0, sticky="ew", padx=12, pady=(0, 26))
+    ctk.CTkFrame(nav_btns, fg_color="transparent").grid(row=5, column=0, sticky="nsew")
 
     # --------------------------
     # Vars (moved from main)
@@ -766,6 +778,74 @@ def build_ui(app: ctk.CTk) -> UI:
         row=2, column=0, columnspan=2, sticky="w", padx=status_card_pad, pady=(0, status_card_pad)
     )
 
+    # --------------------------
+    # Logs Page Layout
+    # --------------------------
+    page_logs.grid_columnconfigure(0, weight=1)
+    page_logs.grid_rowconfigure(3, weight=1)
+
+    logPathText = ctk.StringVar(value="—")
+    logStatusText = ctk.StringVar(value="—")
+    logDetailText = ctk.StringVar(value="—")
+
+    logs_top = ctk.CTkFrame(page_logs, corner_radius=16, fg_color=status_card_color)
+    logs_top.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 8))
+    logs_top.grid_columnconfigure(0, weight=1)
+    logs_top.grid_columnconfigure(1, weight=0)
+
+    ctk.CTkLabel(logs_top, text="Current Log", font=("SF Pro Text", 28, "bold"), text_color="black").grid(
+        row=0, column=0, sticky="w", padx=18, pady=(16, 4)
+    )
+    ctk.CTkLabel(
+        logs_top,
+        textvariable=logPathText,
+        font=("SF Pro Text", 16),
+        text_color="gray25",
+        wraplength=780,
+        justify="left",
+    ).grid(row=1, column=0, sticky="w", padx=18, pady=(0, 16))
+
+    btn_log_refresh = ctk.CTkButton(
+        logs_top,
+        text="Refresh",
+        font=("SF Pro Text", 20, "bold"),
+        height=58,
+        corner_radius=12,
+        command=lambda: None,
+    )
+    btn_log_refresh.grid(row=0, column=1, rowspan=2, sticky="e", padx=18, pady=16)
+
+    logs_status = ctk.CTkFrame(page_logs, corner_radius=16, fg_color=status_card_color)
+    logs_status.grid(row=1, column=0, sticky="ew", padx=12, pady=8)
+    logs_status.grid_columnconfigure(0, weight=1)
+
+    ctk.CTkLabel(logs_status, textvariable=logStatusText, font=("SF Pro Text", 26, "bold"), text_color="black").grid(
+        row=0, column=0, sticky="w", padx=18, pady=(16, 4)
+    )
+    ctk.CTkLabel(
+        logs_status,
+        textvariable=logDetailText,
+        font=("SF Pro Text", 16),
+        text_color="gray25",
+        wraplength=920,
+        justify="left",
+    ).grid(row=1, column=0, sticky="w", padx=18, pady=(0, 16))
+
+    ctk.CTkLabel(page_logs, text="Recent Rows", font=("SF Pro Text", 24, "bold"), text_color="black").grid(
+        row=2, column=0, sticky="w", padx=12, pady=(12, 6)
+    )
+    logPreviewBox = ctk.CTkTextbox(
+        page_logs,
+        corner_radius=12,
+        fg_color="#F6F7F9",
+        text_color="black",
+        font=("SF Mono", 14),
+        wrap="none",
+    )
+    logPreviewBox.grid(row=3, column=0, sticky="nsew", padx=12, pady=(0, 12))
+    logPreviewBox.insert("1.0", "No log data loaded.")
+    logPreviewBox.configure(state="disabled")
+
     # default page
     show_page("operation")
 
@@ -787,6 +867,11 @@ def build_ui(app: ctk.CTk) -> UI:
         lidText=lidText,
         heaterOutText=heaterOutText,
         heaterWarnText=heaterWarnText,
+        logPathText=logPathText,
+        logStatusText=logStatusText,
+        logDetailText=logDetailText,
+        logPreviewBox=logPreviewBox,
+        btn_log_refresh=btn_log_refresh,
         btn_start=btn_start,
         btn_pause=btn_pause,
         btn_stop=btn_stop,

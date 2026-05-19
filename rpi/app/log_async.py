@@ -3,36 +3,40 @@ import os, csv, time, queue, threading
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
-from openpyxl import Workbook, load_workbook
-from openpyxl.utils import get_column_letter
-
 from app.state import AppModel
 
 
 class AsyncLogger:
-    """Append structured log rows to CSV and XLSX on a background thread."""
+    """Append structured log rows to a CSV file on a background thread."""
     def __init__(
         self,
-        xlsx_path: str,
-        csv_path: str,
+        csv_path: Optional[str],
         event_headers: List[str],
         max_dir_bytes: Optional[int] = None,
         prune_target_bytes: Optional[int] = None,
     ):
         """Initialize the logger and start the background worker."""
-        self.xlsx_path = xlsx_path
-        self.csv_path = csv_path
+        self.csv_path = csv_path or ""
         self.event_headers = event_headers
-        self.log_dir = os.path.dirname(self.csv_path) or "."
+        self.enabled = bool(csv_path)
+        self.log_dir = os.path.dirname(self.csv_path) if self.enabled else ""
         self.max_dir_bytes = max_dir_bytes
         self.prune_target_bytes = prune_target_bytes if prune_target_bytes is not None else max_dir_bytes
+        self.rows_written = 0
+        self.last_flush_time = ""
+        self.last_error = ""
+        self.last_error_time = ""
+        self._status_lock = threading.Lock()
 
         self.lq: "queue.Queue[dict]" = queue.Queue()
         self.stop_flag = threading.Event()
         self._sentinel = object()
+        self.t = None
+
+        if not self.enabled:
+            return
 
         self._init_csv()
-        self._init_xlsx()
         self._prune_if_needed()
 
         self.t = threading.Thread(target=self._worker, daemon=True)
@@ -44,30 +48,10 @@ class AsyncLogger:
             with open(self.csv_path, "w", newline="", encoding="utf-8") as f:
                 csv.writer(f).writerow(self.event_headers)
 
-    def _init_xlsx(self):
-        """Create the XLSX log file and worksheets if needed."""
-        if os.path.exists(self.xlsx_path):
-            return
-
-        wb = Workbook()
-        ws_events = wb.active
-        ws_events.title = "Events"
-        ws_events.append(self.event_headers)
-
-        ws_rx = wb.create_sheet("RxRaw")
-        ws_rx.append(["timestamp", "raw_line"])
-
-        ws_tx = wb.create_sheet("TxCmd")
-        ws_tx.append(["timestamp", "command"])
-
-        for ws in (ws_events, ws_rx, ws_tx):
-            for i, h in enumerate(ws[1], start=1):
-                ws.column_dimensions[get_column_letter(i)].width = max(12, min(42, len(str(h)) + 2))
-
-        wb.save(self.xlsx_path)
-
     def log_event(self, row: dict):
         """Queue a single event row for persistence."""
+        if not self.enabled:
+            return
         self.lq.put(row)
 
     # Convenience wrappers so main.py stays clean
@@ -83,40 +67,53 @@ class AsyncLogger:
         """Record a TX command in the event log."""
         self.log_event({"timestamp": timestamp, "event_type": "tx_cmd", "raw": cmd})
 
-    def _append_xlsx(self, batch_rows: List[dict]):
-        """Append a batch of event rows to the XLSX file."""
-        wb = load_workbook(self.xlsx_path)
-        ws_events = wb["Events"]
-        ws_rx = wb["RxRaw"]
-        ws_tx = wb["TxCmd"]
-
-        for r in batch_rows:
-            et = r.get("event_type", "")
-            ts = r.get("timestamp", "")
-            raw = r.get("raw", "")
-
-            ws_events.append([r.get(k, "") for k in self.event_headers])
-
-            if et == "rx_raw":
-                ws_rx.append([ts, raw])
-            elif et == "tx_cmd":
-                ws_tx.append([ts, raw])
-
-        wb.save(self.xlsx_path)
-
     def _append_csv(self, batch_rows: List[dict]):
         """Append a batch of event rows to the CSV file."""
         with open(self.csv_path, "a", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             for r in batch_rows:
                 w.writerow([r.get(k, "") for k in self.event_headers])
+            f.flush()
+            os.fsync(f.fileno())
+
+        with self._status_lock:
+            self.rows_written += len(batch_rows)
+            self.last_flush_time = now_iso()
+            self.last_error = ""
+            self.last_error_time = ""
+
+    def _record_error(self, exc: Exception):
+        """Store the latest persistence error for the UI."""
+        with self._status_lock:
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            self.last_error_time = now_iso()
+
+    def get_status(self) -> Dict[str, Any]:
+        """Return logger status details safe for display in the UI."""
+        try:
+            size_bytes = os.path.getsize(self.csv_path)
+        except OSError:
+            size_bytes = 0
+
+        with self._status_lock:
+            return {
+                "enabled": self.enabled,
+                "csv_path": self.csv_path,
+                "log_dir": self.log_dir,
+                "queued_rows": self.lq.qsize(),
+                "rows_written": self.rows_written,
+                "last_flush_time": self.last_flush_time,
+                "last_error": self.last_error,
+                "last_error_time": self.last_error_time,
+                "size_bytes": size_bytes,
+            }
 
     def _prune_if_needed(self):
         """Delete the oldest inactive log files once the log directory grows too large."""
         if not self.max_dir_bytes or not os.path.isdir(self.log_dir):
             return
 
-        keep_paths = {os.path.abspath(self.csv_path), os.path.abspath(self.xlsx_path)}
+        keep_paths = {os.path.abspath(self.csv_path)}
         log_files = []
         total_bytes = 0
 
@@ -175,30 +172,23 @@ class AsyncLogger:
             if do_flush:
                 try:
                     self._append_csv(batch)
-                    self._append_xlsx(batch)
-                except Exception:
-                    # fallback to CSV only
-                    try:
-                        self._append_csv(batch)
-                    except Exception:
-                        pass
-                self._prune_if_needed()
-                batch.clear()
-                last_flush = time.time()
+                    self._prune_if_needed()
+                    batch.clear()
+                    last_flush = time.time()
+                except Exception as e:
+                    self._record_error(e)
 
         if batch:
             try:
                 self._append_csv(batch)
-                self._append_xlsx(batch)
-            except Exception:
-                try:
-                    self._append_csv(batch)
-                except Exception:
-                    pass
-            self._prune_if_needed()
+                self._prune_if_needed()
+            except Exception as e:
+                self._record_error(e)
 
     def stop(self):
         """Signal the worker thread to stop."""
+        if not self.enabled or self.t is None:
+            return
         self.stop_flag.set()
         self.lq.put(self._sentinel)
         self.t.join(timeout=3.0)

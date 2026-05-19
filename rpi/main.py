@@ -1,5 +1,6 @@
 """Main entry point for the SWARM Raspberry Pi UI application."""
 import queue, time, os
+from collections import deque
 from datetime import datetime
 import customtkinter as ctk
 
@@ -23,14 +24,14 @@ from app.ui_layout import build_ui
 # Logging
 # -------
 LOG_DIR = resolve_log_dir()
-os.makedirs(LOG_DIR, exist_ok=True)
+if LOG_DIR:
+    os.makedirs(LOG_DIR, exist_ok=True)
 
 def log_base_name():
     """Return the base filename for daily log artifacts."""
     return f"swarm_log_{datetime.now().strftime('%Y-%m-%d')}"
 
-XLSX_PATH = os.path.join(LOG_DIR, log_base_name() + ".xlsx")
-CSV_PATH  = os.path.join(LOG_DIR, log_base_name() + ".csv")
+CSV_PATH = os.path.join(LOG_DIR, log_base_name() + ".csv") if LOG_DIR else None
 EVENT_HEADERS = [
     "timestamp",
     "event_type",
@@ -45,12 +46,49 @@ EVENT_HEADERS = [
 ]
 
 logger = AsyncLogger(
-    XLSX_PATH,
     CSV_PATH,
     EVENT_HEADERS,
     max_dir_bytes=LOG_MAX_BYTES,
     prune_target_bytes=LOG_PRUNE_TARGET_BYTES,
 )
+
+
+def recent_log_lines(path: str, max_lines: int = 12) -> str:
+    """Return a short tail of the current CSV log for display."""
+    if not path:
+        return "Logging is disabled because no USB media was detected."
+
+    if not os.path.exists(path):
+        return "No log file has been created yet."
+
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            lines = deque(f, maxlen=max_lines)
+    except OSError as e:
+        return f"Unable to read log: {e}"
+
+    text = "".join(lines).strip()
+    return text if text else "Log file is empty."
+
+
+def format_bytes(size_bytes: int) -> str:
+    """Return a compact human-readable byte count."""
+    value = float(size_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if value < 1024.0 or unit == "GB":
+            return f"{value:.1f} {unit}" if unit != "B" else f"{int(value)} {unit}"
+        value /= 1024.0
+
+
+def log_destination_label(log_dir: str) -> str:
+    """Describe whether the active log is on mounted media or local fallback."""
+    if not log_dir:
+        return "no USB media detected"
+
+    mount_dir = os.path.dirname(log_dir)
+    if os.path.ismount(log_dir) or os.path.ismount(mount_dir):
+        return "USB flash drive"
+    return "unmounted path"
 
 FAULT_DISPLAY = {
     "HEATER_SHUTDOWN": {
@@ -111,6 +149,40 @@ def main():
         send_line=ser_client.send_line,
         log_tx=lambda cmd: logger.log_tx(now_iso(), cmd),
     )
+
+    def refresh_log_view():
+        status = logger.get_status()
+        enabled = status.get("enabled", False)
+        destination = log_destination_label(status["log_dir"])
+        error = status.get("last_error") or ""
+        last_flush = status.get("last_flush_time") or "not flushed yet"
+
+        ui.logPathText.set(status["csv_path"] if enabled else "No USB log drive detected")
+        if not enabled:
+            ui.logStatusText.set("Log status: disabled")
+        else:
+            ui.logStatusText.set("Log status: error" if error else f"Log status: writing to {destination}")
+
+        ui.logDetailText.set(
+            "Logging starts only when a USB drive is detected at app startup."
+            if not enabled else
+            f"Rows written this session: {status['rows_written']} | "
+            f"Queued rows: {status['queued_rows']} | "
+            f"Size: {format_bytes(status['size_bytes'])} | "
+            f"Last flush: {last_flush}"
+            + (f" | Last error: {error}" if error else "")
+        )
+
+        ui.logPreviewBox.configure(state="normal")
+        ui.logPreviewBox.delete("1.0", "end")
+        ui.logPreviewBox.insert("1.0", recent_log_lines(status["csv_path"]))
+        ui.logPreviewBox.configure(state="disabled")
+
+    def refresh_log_view_loop():
+        refresh_log_view()
+        app.after(2000, refresh_log_view_loop)
+
+    ui.btn_log_refresh.configure(command=refresh_log_view)
 
     # Communication Monitoring
     def comms_watchdog():
@@ -377,6 +449,8 @@ def main():
     app.after(200, poll_queue)
 
     app.after(250, comms_watchdog)
+
+    app.after(500, refresh_log_view_loop)
 
     app.mainloop()
 
